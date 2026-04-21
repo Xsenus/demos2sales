@@ -8,6 +8,7 @@
 - server: `79.174.94.14`
 - app dir on VPS: `/opt/demos2sales`
 - git remote on VPS: `/opt/git/demos2sales.git`
+- local `origin`: `demos2sales-vps:/opt/git/demos2sales.git`
 
 ## Что делает система
 
@@ -79,6 +80,11 @@ git add .
 git commit -m "Update demos2sales"
 git push origin main
 ```
+
+SSH alias для этого репозитория хранится в локальном `~/.ssh/config`:
+
+- host: `demos2sales-vps`
+- key: `~/.ssh/id_ed25519_demos2sales_vps`
 
 ## Production окружение
 

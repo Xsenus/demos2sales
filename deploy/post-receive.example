@@ -30,7 +30,7 @@ while read -r oldrev newrev refname; do
   rm -rf "${release_dir}"
   mkdir -p "${release_dir}"
 
-  git --work-tree="${release_dir}" --git-dir="${BARE_REPO_DIR}" checkout -f "${newrev}"
+  git -c advice.detachedHead=false --work-tree="${release_dir}" --git-dir="${BARE_REPO_DIR}" checkout -f "${newrev}"
 
   APP_NAME="${APP_NAME}" \
   APP_BASE_DIR="${APP_BASE_DIR}" \
@@ -40,4 +40,8 @@ while read -r oldrev newrev refname; do
   RELEASES_TO_KEEP="${RELEASES_TO_KEEP}" \
   RELEASE_DIR="${release_dir}" \
   bash "${release_dir}/deploy/deploy_from_checkout.sh"
+
+  if [[ -f "${release_dir}/deploy/post-receive.example" ]]; then
+    install -m 755 "${release_dir}/deploy/post-receive.example" "${BARE_REPO_DIR}/hooks/post-receive"
+  fi
 done
