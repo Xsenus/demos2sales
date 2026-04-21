@@ -1,0 +1,94 @@
+name: Deploy To VPS (demos2sales)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-demos2sales-production
+  cancel-in-progress: true
+
+env:
+  APP_NAME: demos2sales
+  APP_BASE_DIR: /opt/demos2sales
+  APP_USER: www-data
+  APP_GROUP: www-data
+  SERVICE_NAME: demos2sales.service
+  RELEASES_TO_KEEP: 5
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies for validation
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate Python files
+        run: |
+          python -m py_compile "irbistech_demo_sales_premiums_colab_v6_5_sql(1).py" demo_calculator_widget.py serve.py
+
+      - name: Build release archive
+        run: |
+          ARCHIVE_PATH="${RUNNER_TEMP}/demos2sales-release.tar.gz"
+          tar \
+            --exclude-vcs \
+            --exclude='.github' \
+            --exclude='.venv' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.env' \
+            --exclude='data' \
+            --exclude='logs' \
+            -czf "${ARCHIVE_PATH}" .
+          echo "RELEASE_ARCHIVE=${ARCHIVE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${VPS_PORT:-22}" -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload release bundle and deploy script
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          scp -P "${VPS_PORT:-22}" "${RELEASE_ARCHIVE}" "${VPS_USER}@${VPS_HOST}:/tmp/demos2sales-release.tar.gz"
+          scp -P "${VPS_PORT:-22}" deploy/remote_deploy.sh "${VPS_USER}@${VPS_HOST}:/tmp/remote_deploy.sh"
+
+      - name: Run remote deployment
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          ssh -p "${VPS_PORT:-22}" "${VPS_USER}@${VPS_HOST}" \
+            "chmod +x /tmp/remote_deploy.sh && \
+            APP_NAME='${APP_NAME}' \
+            APP_BASE_DIR='${APP_BASE_DIR}' \
+            APP_USER='${APP_USER}' \
+            APP_GROUP='${APP_GROUP}' \
+            SERVICE_NAME='${SERVICE_NAME}' \
+            RELEASES_TO_KEEP='${RELEASES_TO_KEEP}' \
+            bash /tmp/remote_deploy.sh /tmp/demos2sales-release.tar.gz '${GITHUB_SHA}'"
