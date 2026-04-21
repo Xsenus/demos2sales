@@ -1,0 +1,61 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+dist/
+build/
+.eggs/
+*.egg-info/
+*.egg
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.pytype/
+.pyre/
+.hypothesis/
+.ruff_cache/
+.cache/
+
+# Runtime data
+data/
+logs/
+*.log
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Archives / temporary files
+*.pid
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# Local helper files
+deploy/keys/

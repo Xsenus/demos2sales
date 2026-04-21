@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+umask 027
+
+APP_NAME="${APP_NAME:-demos2sales}"
+APP_BASE_DIR="${APP_BASE_DIR:-/opt/${APP_NAME}}"
+APP_USER="${APP_USER:-www-data}"
+APP_GROUP="${APP_GROUP:-${APP_USER}}"
+SERVICE_NAME="${SERVICE_NAME:-demos2sales.service}"
+RELEASES_TO_KEEP="${RELEASES_TO_KEEP:-5}"
+BARE_REPO_DIR="${BARE_REPO_DIR:-/opt/git/${APP_NAME}.git}"
+RELEASES_DIR="${APP_BASE_DIR}/releases"
+LOCK_FILE="/tmp/${APP_NAME}.deploy.lock"
+
+exec 9>"${LOCK_FILE}"
+flock -n 9 || {
+  echo "Another deploy is already running." >&2
+  exit 1
+}
+
+while read -r oldrev newrev refname; do
+  if [[ "${refname}" != "refs/heads/main" ]]; then
+    continue
+  fi
+
+  release_id="$(date -u +%Y%m%d-%H%M%S)-${newrev:0:7}"
+  release_dir="${RELEASES_DIR}/${release_id}"
+
+  rm -rf "${release_dir}"
+  mkdir -p "${release_dir}"
+
+  git --work-tree="${release_dir}" --git-dir="${BARE_REPO_DIR}" checkout -f "${newrev}"
+
+  APP_NAME="${APP_NAME}" \
+  APP_BASE_DIR="${APP_BASE_DIR}" \
+  APP_USER="${APP_USER}" \
+  APP_GROUP="${APP_GROUP}" \
+  SERVICE_NAME="${SERVICE_NAME}" \
+  RELEASES_TO_KEEP="${RELEASES_TO_KEEP}" \
+  RELEASE_DIR="${release_dir}" \
+  bash "${release_dir}/deploy/deploy_from_checkout.sh"
+done

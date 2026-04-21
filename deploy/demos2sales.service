@@ -1,0 +1,21 @@
+[Unit]
+Description=Demos2Sales Gradio app
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/demos2sales/current
+EnvironmentFile=/opt/demos2sales/shared/.env
+ExecStart=/opt/demos2sales/current/.venv/bin/python /opt/demos2sales/current/serve.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
