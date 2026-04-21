@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Вопрос по эксплуатации
+    url: https://demos2sales.irbistech.com/
+    about: Если задача связана с уже развернутым сервисом, приложите URL и описание сценария.
