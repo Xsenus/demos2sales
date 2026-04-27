@@ -129,6 +129,14 @@ def dataframe_compat(**kwargs):
         kwargs["col_count"] = kwargs.pop("column_count")
     return gr.Dataframe(**kwargs)
 
+
+def browser_state_compat(default_value=None, storage_key=None):
+    """Uses BrowserState when available, falling back to volatile State on older Gradio."""
+    browser_state_cls = getattr(gr, "BrowserState", None)
+    if browser_state_cls is None:
+        return gr.State(default_value)
+    return browser_state_cls(default_value, storage_key=storage_key)
+
 # ============================================================
 # 1. НАСТРОЙКИ ПОДКЛЮЧЕНИЯ И КОНСТАНТЫ
 # ============================================================
@@ -2443,6 +2451,108 @@ def build_css(settings=None):
       text-transform: uppercase !important;
     }}
 
+    .workflow-guide {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      margin: var(--space-3) 0 var(--space-4) !important;
+      padding: 12px !important;
+    }}
+
+    .workflow-guide-title {{
+      color: var(--color-text) !important;
+      font-size: 13px !important;
+      font-weight: 900 !important;
+      margin-bottom: 8px !important;
+    }}
+
+    .workflow-step {{
+      align-items: flex-start !important;
+      color: var(--color-muted) !important;
+      display: flex !important;
+      gap: 8px !important;
+      font-size: 12px !important;
+      line-height: 1.35 !important;
+      margin-top: 7px !important;
+    }}
+
+    .workflow-step b {{
+      background: var(--color-primary-soft) !important;
+      border: 1px solid rgba(37,99,235,.18) !important;
+      border-radius: 999px !important;
+      color: var(--color-primary-dark) !important;
+      display: inline-grid !important;
+      flex: 0 0 22px !important;
+      font-size: 11px !important;
+      height: 22px !important;
+      place-items: center !important;
+      width: 22px !important;
+    }}
+
+    .sidebar-help-note,
+    .danger-note,
+    .table-note {{
+      border-radius: var(--radius-md) !important;
+      font-size: 12px !important;
+      line-height: 1.45 !important;
+      padding: 10px 12px !important;
+    }}
+
+    .sidebar-help-note,
+    .table-note {{
+      border: 1px solid rgba(37,99,235,.18) !important;
+    }}
+
+    .sidebar-help-note {{
+      background: var(--color-primary-soft) !important;
+      color: var(--color-primary-dark) !important;
+      margin-bottom: var(--space-2) !important;
+    }}
+
+    .table-note {{
+      background: #FFFFFF !important;
+      border-left: 3px solid var(--color-primary) !important;
+      color: var(--color-muted) !important;
+      margin: var(--space-2) 0 var(--space-3) !important;
+    }}
+
+    .danger-note {{
+      background: var(--color-warning-soft) !important;
+      border: 1px solid rgba(245,158,11,.30) !important;
+      color: #92400E !important;
+      font-size: 11px !important;
+      margin-top: var(--space-2) !important;
+      padding: 8px 10px !important;
+    }}
+
+    .form-help-strip {{
+      align-items: flex-start !important;
+      background: #F8FAFC !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-muted) !important;
+      display: flex !important;
+      font-size: 12px !important;
+      gap: 8px !important;
+      line-height: 1.45 !important;
+      margin-bottom: var(--space-3) !important;
+      padding: 10px 12px !important;
+    }}
+
+    .form-help-strip::before {{
+      content: "i" !important;
+      background: var(--color-primary-soft) !important;
+      border: 1px solid rgba(37,99,235,.18) !important;
+      border-radius: 999px !important;
+      color: var(--color-primary-dark) !important;
+      display: inline-grid !important;
+      flex: 0 0 20px !important;
+      font-weight: 900 !important;
+      height: 20px !important;
+      place-items: center !important;
+      width: 20px !important;
+    }}
+
     .add-action-row,
     .secondary-action-row {{
       gap: var(--space-2) !important;
@@ -2495,10 +2605,23 @@ def build_css(settings=None):
 
     .status-field textarea,
     .status-field input {{
-      background: var(--color-surface) !important;
-      color: var(--color-muted) !important;
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37, 99, 235, .18) !important;
+      color: var(--color-text) !important;
       font-size: 12px !important;
-      min-height: 38px !important;
+      font-weight: 700 !important;
+      line-height: 1.45 !important;
+      min-height: 44px !important;
+      padding: 10px 12px !important;
+      resize: none !important;
+    }}
+
+    .status-field label span {{
+      color: var(--color-muted) !important;
+      font-size: 11px !important;
+      font-weight: 850 !important;
+      letter-spacing: .04em !important;
+      text-transform: uppercase !important;
     }}
 
     .action-workspace {{
@@ -3050,6 +3173,9 @@ def build_css(settings=None):
     .ui-settings-section [data-testid="dataframe"],
     .premium-tables-section [data-testid="dataframe"] {{
       overflow-x: auto !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-sm) !important;
     }}
 
     .products-table-section table,
@@ -3057,6 +3183,70 @@ def build_css(settings=None):
     .expense-settings-section table,
     .ui-settings-section table {{
       font-size: 12px !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] table {{
+      border-collapse: separate !important;
+      border-spacing: 0 !important;
+      min-width: max-content !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] th {{
+      background: #F8FAFC !important;
+      border-bottom: 1px solid var(--color-border) !important;
+      color: var(--color-muted) !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .04em !important;
+      line-height: 1.25 !important;
+      padding: 9px 10px !important;
+      position: sticky !important;
+      text-transform: uppercase !important;
+      top: 0 !important;
+      white-space: nowrap !important;
+      z-index: 2 !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] th:first-child,
+    .gradio-container [data-testid="dataframe"] td:first-child {{
+      left: 0 !important;
+      max-width: 340px !important;
+      min-width: 150px !important;
+      position: sticky !important;
+      white-space: normal !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] th:first-child {{
+      z-index: 4 !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] td:first-child {{
+      background: #FFFFFF !important;
+      box-shadow: 1px 0 0 #EEF2F7 !important;
+      z-index: 1 !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] td {{
+      border-bottom: 1px solid #EEF2F7 !important;
+      color: var(--color-text) !important;
+      font-variant-numeric: tabular-nums !important;
+      line-height: 1.35 !important;
+      vertical-align: middle !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] tr:hover td {{
+      background: var(--color-primary-soft) !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] tr:hover td:first-child {{
+      background: var(--color-primary-soft) !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] input,
+    .gradio-container [data-testid="dataframe"] textarea {{
+      font-variant-numeric: tabular-nums !important;
+      min-height: var(--table-row-height) !important;
+      overflow-wrap: anywhere !important;
     }}
 
     .admin-status-field textarea,
@@ -3390,7 +3580,8 @@ def build_css(settings=None):
       border: 1px solid var(--color-border) !important;
       border-radius: var(--radius-lg) !important;
       box-shadow: var(--shadow-sm) !important;
-      overflow: hidden !important;
+      overflow: auto !important;
+      -webkit-overflow-scrolling: touch !important;
     }}
 
     .gradio-container [data-testid="dataframe"] textarea,
@@ -3418,6 +3609,23 @@ def build_css(settings=None):
       padding: 0 !important;
     }}
 
+    .action-list::after {{
+      content: "Подсказка: если список пуст, добавьте действие выше или измените фильтр менеджера." !important;
+      display: block !important;
+      margin-top: var(--space-2) !important;
+      padding: 10px 12px !important;
+      background: var(--color-surface) !important;
+      border: 1px dashed var(--color-border-strong) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-muted) !important;
+      font-size: 12px !important;
+      line-height: 1.4 !important;
+    }}
+
+    .action-list:has(input[type="radio"])::after {{
+      display: none !important;
+    }}
+
     .action-list .wrap,
     .action-list .wrap > div,
     .action-list [role="radiogroup"] {{
@@ -3443,6 +3651,10 @@ def build_css(settings=None):
       transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
       white-space: pre-line !important;
       width: 100% !important;
+    }}
+
+    .action-list label + label {{
+      margin-top: var(--space-2) !important;
     }}
 
     .action-list label span,
@@ -3646,7 +3858,8 @@ def build_css(settings=None):
       }}
 
       .login-shell {{
-        max-width: 920px !important;
+        max-width: none !important;
+        width: 100% !important;
       }}
 
       .login-hero {{
@@ -3699,6 +3912,15 @@ def build_css(settings=None):
         text-align: left !important;
       }}
 
+      .profile-actions {{
+        flex-direction: row !important;
+        width: 100% !important;
+      }}
+
+      .profile-actions > * {{
+        min-width: 0 !important;
+      }}
+
       .calc-header {{
         padding: 22px !important;
       }}
@@ -3733,6 +3955,11 @@ def build_css(settings=None):
 
       .criteria-radio label {{
         flex: 1 1 220px !important;
+      }}
+
+      .demo-action-panel {{
+        bottom: auto !important;
+        position: static !important;
       }}
 
       .sale-card-header,
@@ -3835,6 +4062,7 @@ def build_css(settings=None):
 
       .add-action-row,
       .secondary-action-row,
+      .profile-actions,
       .director-fields,
       .demo-action-row,
       .products-toolbar,
@@ -3975,19 +4203,13 @@ if gradio_has_kwarg(gr.Blocks.launch, "allowed_paths"):
 with gr.Blocks(**BLOCKS_KWARGS) as app:
     gr.HTML(f"<style>{APP_CSS}</style>")
     current_user = gr.State(None)
-    browser_user = gr.BrowserState(None, storage_key="demos2sales_current_user")
+    browser_user = browser_state_compat(None, storage_key="demos2sales_current_user")
     current_action_id = gr.State("")
-    gr.HTML("""
-    <div class="calc-header">
-      <h1>ИРБИСТЕХ — демонстрации, продажи и премии</h1>
-      <p>Учет действий менеджеров, сметы демонстраций, продаж и выплат премий. Данные хранятся в PostgreSQL.</p>
-    </div>
-    """)
 
     with gr.Group(visible=True, elem_classes=["login-shell"]) as login_group:
         gr.HTML("""
         <section class="login-hero">
-          <div class="login-eyebrow">B2B dashboard</div>
+          <div class="login-eyebrow">Рабочая панель</div>
           <h1>ИРБИСТЕХ</h1>
           <h2>Демонстрации, продажи и премии</h2>
           <p>Единое рабочее пространство для учета действий менеджеров, расчета смет демонстраций, продаж оборудования и подтверждения премий директором.</p>
@@ -4001,8 +4223,8 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                   <p class="login-card-subtitle">Используйте рабочий логин и пароль, чтобы открыть действия, расчеты и подтверждения.</p>
                 </div>
                 """)
-                login_input = gr.Textbox(label="Логин", value="", elem_classes=["login-field"])
-                password_input = gr.Textbox(label="Пароль", type="password", value="", elem_classes=["login-field"])
+                login_input = gr.Textbox(label="Логин", value="", placeholder="Например: artur", elem_classes=["login-field"])
+                password_input = gr.Textbox(label="Пароль", type="password", value="", placeholder="Введите пароль", elem_classes=["login-field"])
                 login_btn = gr.Button("Войти", variant="primary", elem_classes=["login-submit"])
                 login_error = gr.HTML("", elem_classes=["login-error-slot"])
             with gr.Column(scale=5, elem_classes=["login-side-column"]):
@@ -4050,9 +4272,10 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                 with gr.Row(elem_classes=["actions-layout"]):
                     with gr.Column(scale=3, elem_classes=["actions-sidebar"]):
                         gr.HTML("<div class='sidebar-head'><div><div class='sidebar-title'>Действия</div><p>Рабочая лента менеджеров с типом, статусом, датой и суммой.</p></div></div>")
+                        gr.HTML("<div class='workflow-guide'><div class='workflow-guide-title'>Как работать</div><div class='workflow-step'><b>1</b><span>Добавьте демонстрацию, продажу или премию.</span></div><div class='workflow-step'><b>2</b><span>Заполните карточку справа и проверьте итоговые суммы.</span></div><div class='workflow-step'><b>3</b><span>Сохраните действие. Директор при необходимости подтвердит сумму.</span></div></div>")
                         manager_filter = gr.Dropdown(label="Фильтр по менеджеру", choices=MANAGER_FILTER_CHOICES, value="__all__", visible=False)
-                        manager_to_add = gr.Dropdown(label="Добавить менеджеру", choices=MANAGER_CHOICES, value=MANAGER_LOGINS[0], visible=False)
-                        action_list = gr.Radio(label="Действия", choices=[], elem_classes=["action-list"])
+                        manager_to_add = gr.Dropdown(label="Создать действие для менеджера", choices=MANAGER_CHOICES, value=MANAGER_LOGINS[0], visible=False)
+                        action_list = gr.Radio(label="Действия", choices=[], show_label=False, elem_classes=["action-list"])
                         gr.HTML("<div class='sidebar-actions-title'>Добавить действие</div>")
                         with gr.Row(elem_classes=["add-action-row"]):
                             add_demo_btn = gr.Button("+ Демонстрация", elem_classes=["add-action-button"])
@@ -4060,13 +4283,14 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                             add_premium_btn = gr.Button("+ Премия", elem_classes=["add-action-button"])
                         gr.HTML("<div class='sidebar-actions-title'>Управление</div>")
                         with gr.Row(elem_classes=["secondary-action-row"]):
-                            move_up_btn = gr.Button("Выше", elem_classes=["secondary-button"])
-                            move_down_btn = gr.Button("Ниже", elem_classes=["secondary-button"])
-                            delete_btn = gr.Button("Удалить", elem_classes=["danger-button"])
-                        action_status = gr.Textbox(label="Статус операции", interactive=False, elem_classes=["status-field"])
+                            move_up_btn = gr.Button("Поднять", elem_classes=["secondary-button"])
+                            move_down_btn = gr.Button("Опустить", elem_classes=["secondary-button"])
+                            delete_btn = gr.Button("Удалить выбранное", elem_classes=["danger-button"])
+                        gr.HTML("<div class='danger-note'>Удаление применяется к выбранной записи из списка. Перед удалением проверьте, что выбрана нужная карточка.</div>")
+                        action_status = gr.Textbox(label="Статус операции", placeholder="Здесь появится результат добавления, перемещения или удаления.", interactive=False, elem_classes=["status-field"])
                     with gr.Column(scale=7, elem_classes=["action-workspace"]):
                         with gr.Group(elem_classes=["director-card"]):
-                            gr.HTML("<div class='director-card-head'><div><div class='director-title'>Подтверждение директора</div><p>Проверка, фиксация суммы и блокировка действия после закрытия периода.</p></div><span class='director-badge'>Approval</span></div>")
+                            gr.HTML("<div class='director-card-head'><div><div class='director-title'>Подтверждение директора</div><p>Проверка, фиксация суммы и блокировка действия после закрытия периода.</p></div><span class='director-badge'>Проверка</span></div>")
                             with gr.Row(elem_classes=["director-fields"]):
                                 director_confirmed = gr.Checkbox(label="Подтверждено директором", interactive=False)
                                 confirmed_amount = gr.Number(label="Сумма, подтвержденная директором", value=0, interactive=False)
@@ -4085,19 +4309,21 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                             """)
                             with gr.Group(elem_classes=["demo-section", "demo-main-info"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Основная информация</div><p>Ключевые данные демонстрации для списка действий, отчетности и расчета.</p></div></div>")
+                                gr.HTML("<div class='form-help-strip'>Заполните минимум клиента, дату, менеджера и задачу очистки. Эти поля помогают быстро найти демонстрацию в журнале действий.</div>")
                                 with gr.Row(elem_classes=["demo-key-fields"]):
-                                    demo_client = gr.Textbox(label="Клиент", elem_classes=["demo-key-field"])
-                                    demo_date = gr.Textbox(label="Дата", elem_classes=["demo-key-field"])
+                                    demo_client = gr.Textbox(label="Клиент", placeholder="Название компании или объекта", elem_classes=["demo-key-field"])
+                                    demo_date = gr.Textbox(label="Дата", placeholder="ГГГГ-ММ-ДД", elem_classes=["demo-key-field"])
                                     demo_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
                                 with gr.Row(elem_classes=["demo-meta-fields"]):
-                                    demo_city = gr.Textbox(label="Город")
-                                    demo_model = gr.Textbox(label="Модель")
-                                demo_task = gr.Textbox(label="Задача очистки", lines=2)
-                                demo_comment = gr.Textbox(label="Комментарий", lines=2)
+                                    demo_city = gr.Textbox(label="Город", placeholder="Город демонстрации")
+                                    demo_model = gr.Textbox(label="Модель", placeholder="Например: TRANSFORMER 2.0 MAX")
+                                demo_task = gr.Textbox(label="Задача очистки", lines=2, placeholder="Что именно очищали и какой результат ожидался")
+                                demo_comment = gr.Textbox(label="Комментарий", lines=2, placeholder="Дополнительные детали, риски, договоренности")
                             with gr.Group(elem_classes=["demo-section", "demo-calculator-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Калькулятор расходов</div><p>Отдельная смета демонстрации: вводные менеджера, системные ставки и автоматические формулы.</p></div></div>")
                                 demo_calc_html = gr.HTML(initial_demo_html)
                                 demo_calc_state_json = gr.Textbox(value=initial_demo_state_json, visible=False, show_label=False, elem_id="demo-calc-state-json")
+                                gr.HTML("<div class='table-note'>Дополнительные строки используйте только для нестандартных расходов, которых нет в основном калькуляторе.</div>")
                                 demo_extra_expenses_df = dataframe_compat(headers=EXPENSE_COLUMNS, value=initial_demo_extra_df, row_count=(2,"dynamic"), col_count=(7,"fixed"), interactive=True, label="Дополнительные строки сметы")
                             with gr.Group(elem_classes=["demo-section", "demo-kpi-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Итоги расчета</div><p>Ключевые суммы и коэффициенты обновляются после пересчета или сохранения.</p></div></div>")
@@ -4171,9 +4397,9 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                             ''')
                             with gr.Group(elem_classes=["demo-action-panel"]):
                                 with gr.Row(elem_classes=["demo-action-row"]):
-                                    demo_recalc_btn = gr.Button("Пересчитать", elem_classes=["secondary-button"])
+                                    demo_recalc_btn = gr.Button("Пересчитать итоги", elem_classes=["secondary-button"])
                                     demo_save_btn = gr.Button("Сохранить демонстрацию", variant="primary", elem_classes=["demo-save-button"])
-                                demo_status = gr.Textbox(label="Статус сохранения", interactive=False, elem_classes=["status-field", "demo-status-field"])
+                                demo_status = gr.Textbox(label="Статус сохранения", placeholder="После сохранения здесь появится результат операции.", interactive=False, elem_classes=["status-field", "demo-status-field"])
 
                         with gr.Group(visible=False, elem_classes=["action-detail-card"]) as sale_group:
                             gr.HTML("""
@@ -4188,25 +4414,27 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                             """)
                             with gr.Group(elem_classes=["demo-section", "sale-main-info"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Основная информация</div><p>Дата, менеджер, клиент и комментарий для карточки продажи.</p></div></div>")
+                                gr.HTML("<div class='form-help-strip'>Сначала заполните дату и клиента, затем добавьте товары из справочника ниже.</div>")
                                 with gr.Row(elem_classes=["demo-key-fields"]):
-                                    sale_date = gr.Textbox(label="Дата", elem_classes=["demo-key-field"])
+                                    sale_date = gr.Textbox(label="Дата", placeholder="ГГГГ-ММ-ДД", elem_classes=["demo-key-field"])
                                     sale_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
-                                    sale_client = gr.Textbox(label="Клиент", elem_classes=["demo-key-field"])
-                                sale_comment = gr.Textbox(label="Комментарий", lines=2)
+                                    sale_client = gr.Textbox(label="Клиент", placeholder="Покупатель или объект", elem_classes=["demo-key-field"])
+                                sale_comment = gr.Textbox(label="Комментарий", lines=2, placeholder="Условия сделки, счет, договоренность")
                             with gr.Group(elem_classes=["demo-section", "sale-product-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Поиск товара</div><p>Введите минимум 3 символа, выберите подходящий товар из справочника и он добавится в таблицу продажи.</p></div><span class='demo-section-badge'>Справочник</span></div>")
                                 with gr.Row(elem_classes=["sale-search-row"]):
-                                    sale_product_search = gr.Textbox(label="Поиск товара", elem_classes=["sale-search-field"])
+                                    sale_product_search = gr.Textbox(label="Поиск товара", placeholder="Минимум 3 символа: модель, артикул или название", elem_classes=["sale-search-field"])
                                     sale_product_select = gr.Dropdown(label="Подходящие товары", choices=[], elem_classes=["sale-select-field"])
+                                gr.HTML("<div class='table-note'>После выбора товара проверьте количество и цену в таблице. Широкая таблица прокручивается горизонтально.</div>")
                                 sale_rows_df = dataframe_compat(headers=SALE_COLUMNS, value=blank_df(SALE_COLUMNS), row_count=(1,"dynamic"), col_count=(13,"fixed"), interactive=True, label="Товары продажи")
                             with gr.Group(elem_classes=["demo-section", "sale-kpi-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Итоги продажи</div><p>Расчетная премия и сумма продажи обновляются после выбора товара или пересчета.</p></div></div>")
                                 sale_kpi_html = gr.HTML("", elem_classes=["demo-kpi-output"])
                             with gr.Group(elem_classes=["demo-action-panel", "sale-action-panel"]):
                                 with gr.Row(elem_classes=["demo-action-row"]):
-                                    sale_recalc_btn = gr.Button("Пересчитать", elem_classes=["secondary-button"])
+                                    sale_recalc_btn = gr.Button("Пересчитать итоги", elem_classes=["secondary-button"])
                                     sale_save_btn = gr.Button("Сохранить продажу", variant="primary", elem_classes=["demo-save-button"])
-                                sale_status = gr.Textbox(label="Статус сохранения", interactive=False, elem_classes=["status-field", "demo-status-field"])
+                                sale_status = gr.Textbox(label="Статус сохранения", placeholder="После сохранения здесь появится результат операции.", interactive=False, elem_classes=["status-field", "demo-status-field"])
 
                         with gr.Group(visible=False, elem_classes=["action-detail-card"]) as premium_group:
                             gr.HTML("""
@@ -4221,20 +4449,22 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                             """)
                             with gr.Group(elem_classes=["demo-section", "premium-main-info"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Параметры выплаты</div><p>Дата выплаты, менеджер и комментарий к закрытию периода.</p></div></div>")
+                                gr.HTML("<div class='form-help-strip'>Премия закрывает период по выбранному менеджеру. Перед сохранением проверьте состав продаж и демонстраций ниже.</div>")
                                 with gr.Row(elem_classes=["demo-key-fields"]):
-                                    premium_date = gr.Textbox(label="Дата", elem_classes=["demo-key-field"])
+                                    premium_date = gr.Textbox(label="Дата", placeholder="ГГГГ-ММ-ДД", elem_classes=["demo-key-field"])
                                     premium_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
-                                premium_comment = gr.Textbox(label="Комментарий", lines=2)
+                                premium_comment = gr.Textbox(label="Комментарий", lines=2, placeholder="Комментарий к закрытию периода")
                             with gr.Group(elem_classes=["demo-section", "premium-kpi-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Финансовый итог</div><p>Сводка продаж, демо-вычетов и суммы к выплате.</p></div><span class='premium-close-badge'>Закрытие периода</span></div>")
                                 premium_kpi_html = gr.HTML("", elem_classes=["demo-kpi-output", "premium-kpi-output"])
                             with gr.Group(elem_classes=["demo-section", "premium-tables-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Состав периода</div><p>Продажи и демонстрации, вошедшие в расчет премии.</p></div></div>")
+                                gr.HTML("<div class='table-note'>Если таблицы пустые, в периоде нет подходящих продаж или демонстраций для расчета премии.</div>")
                                 premium_sales_df = dataframe_compat(label="Продажи периода", value=blank_df([]), interactive=False)
                                 premium_demos_df = dataframe_compat(label="Демонстрации периода", value=blank_df([]), interactive=False)
                             with gr.Group(elem_classes=["demo-action-panel", "premium-action-panel"]):
-                                premium_save_btn = gr.Button("Сохранить премию", variant="primary", elem_classes=["demo-save-button", "premium-save-button"])
-                                premium_status = gr.Textbox(label="Статус сохранения", interactive=False, elem_classes=["status-field", "demo-status-field"])
+                                premium_save_btn = gr.Button("Сохранить выплату премии", variant="primary", elem_classes=["demo-save-button", "premium-save-button"])
+                                premium_status = gr.Textbox(label="Статус сохранения", placeholder="После сохранения здесь появится результат операции.", interactive=False, elem_classes=["status-field", "demo-status-field"])
 
             with gr.Tab("Товары"):
                 gr.HTML("""
@@ -4257,14 +4487,15 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                         product_save_btn = gr.Button("Сохранить товары", variant="primary", visible=False, elem_classes=["demo-save-button"])
                 with gr.Group(elem_classes=["admin-section", "products-table-section"]):
                     gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Справочник товаров</div><p>Таблица может прокручиваться горизонтально на узких экранах.</p></div></div>")
+                    gr.HTML("<div class='table-note'>Редактирование справочника доступно директору. Менеджеры видят цены и премии в режиме просмотра.</div>")
                     products_df = dataframe_compat(headers=PRODUCT_COLUMNS, value=products_to_df(APP_STATE["products"], APP_STATE["settings"]), row_count=(5,"dynamic"), col_count=(10,"fixed"), interactive=False, label="Справочник товаров")
-                    products_status = gr.Textbox(label="Статус товаров", interactive=False, elem_classes=["status-field", "admin-status-field"])
+                    products_status = gr.Textbox(label="Статус товаров", placeholder="Здесь появится результат загрузки или сохранения справочника.", interactive=False, elem_classes=["status-field", "admin-status-field"])
 
             with gr.Tab("Настройки"):
                 gr.HTML("""
                 <div class="admin-page-header settings-header">
                   <div>
-                    <div class="admin-page-eyebrow">Admin panel</div>
+                    <div class="admin-page-eyebrow">Панель директора</div>
                     <h2>Настройки системы</h2>
                     <p>Финансовые коэффициенты, смета демонстрации, критерии, параметры интерфейса, резервные копии и экспорт рабочих данных.</p>
                   </div>
@@ -4283,9 +4514,11 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                         diesel_l = gr.Number(label="Расход дизеля, л / 100 км", value=settings0.get("diesel_l_per_100km",12), interactive=False)
                 with gr.Group(elem_classes=["admin-section", "criteria-settings-section"]):
                     gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Критерии и баллы</div><p>Настройка блоков P/R/M и уровней, влияющих на вычет демонстрации.</p></div></div>")
+                    gr.HTML("<div class='table-note'>Изменяйте баллы аккуратно: они напрямую влияют на коэффициент вычета в демонстрациях.</div>")
                     criteria_settings_df = dataframe_compat(headers=CRITERIA_SETTINGS_COLUMNS, value=criteria_to_df(settings0), row_count=(22,"dynamic"), col_count=(5,"fixed"), interactive=False, label="Баллы уровней критериев")
                 with gr.Group(elem_classes=["admin-section", "expense-settings-section"]):
                     gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Расходы демонстрации</div><p>Ставки, единицы измерения, редактируемость и типы расчета для сметы демонстрации.</p></div></div>")
+                    gr.HTML("<div class='table-note'>Эти строки задают системные ставки калькулятора. Широкие таблицы прокручиваются горизонтально.</div>")
                     expense_settings_df = dataframe_compat(headers=EXPENSE_SETTINGS_COLUMNS, value=expense_settings_to_df(settings0), row_count=(17,"dynamic"), col_count=(9,"fixed"), interactive=False, label="Настройки сметы демонстрации")
                 with gr.Group(elem_classes=["admin-section", "ui-settings-section"]):
                     gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Интерфейс</div><p>Параметры отображения таблиц, критериев и базовой типографики.</p></div></div>")
@@ -4293,21 +4526,21 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                     ui_settings_df = dataframe_compat(headers=UI_SETTINGS_COLUMNS, value=ui_settings_to_df(settings0), row_count=(6,"fixed"), col_count=(3,"fixed"), interactive=False, label="Настройки интерфейса")
                 with gr.Group(elem_classes=["admin-section", "settings-save-section"]):
                     settings_save_btn = gr.Button("Сохранить настройки", variant="primary", visible=False, elem_classes=["demo-save-button"])
-                    settings_status = gr.Textbox(label="Статус настроек", interactive=False, elem_classes=["status-field", "admin-status-field"])
+                    settings_status = gr.Textbox(label="Статус настроек", placeholder="Здесь появится результат сохранения настроек.", interactive=False, elem_classes=["status-field", "admin-status-field"])
                 with gr.Group(elem_classes=["admin-section", "maintenance-section"]):
-                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Резервные копии и экспорт</div><p>Панель обслуживания для JSON-резервов и Excel-выгрузок. Импорт JSON перезаписывает рабочие данные после обработки файла.</p></div><span class='maintenance-badge'>Maintenance</span></div>")
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Резервные копии и экспорт</div><p>Панель обслуживания для JSON-резервов и Excel-выгрузок. Импорт JSON перезаписывает рабочие данные после обработки файла.</p></div><span class='maintenance-badge'>Обслуживание</span></div>")
                     with gr.Row(elem_classes=["maintenance-actions"]):
                         with gr.Column(scale=1, elem_classes=["maintenance-card", "export-card"]):
-                            gr.HTML("<div class='maintenance-card-title'>Export actions</div><p>Скачивание данных без изменения состояния системы.</p>")
+                            gr.HTML("<div class='maintenance-card-title'>Экспорт данных</div><p>Скачивание данных без изменения состояния системы.</p>")
                             export_json_btn = gr.Button("Скачать JSON", elem_classes=["secondary-button"])
                             export_json_file = gr.File(label="JSON")
                             export_xlsx_btn = gr.Button("Экспорт в Excel", elem_classes=["secondary-button"])
                             export_xlsx_file = gr.File(label="Excel")
                         with gr.Column(scale=1, elem_classes=["maintenance-card", "import-card"]):
-                            gr.HTML("<div class='maintenance-card-title'>Import actions</div><p>Загрузка JSON может изменить рабочие данные. Используйте аккуратно.</p>")
+                            gr.HTML("<div class='maintenance-card-title'>Импорт данных</div><p>Загрузка JSON может изменить рабочие данные. Используйте аккуратно.</p>")
                             import_json_file = gr.File(label="Загрузить JSON", file_types=[".json"])
                             import_json_btn = gr.Button("Импорт JSON", elem_classes=["danger-button"])
-                    json_status = gr.Textbox(label="Статус JSON/Excel", interactive=False, elem_classes=["status-field", "admin-status-field"])
+                    json_status = gr.Textbox(label="Статус JSON/Excel", placeholder="Здесь появится результат экспорта или импорта.", interactive=False, elem_classes=["status-field", "admin-status-field"])
 
     detail_outputs = [current_action_id, demo_group, sale_group, premium_group, director_confirmed, confirmed_amount, director_comment, demo_client, demo_date, demo_manager, demo_city, demo_model, demo_task, demo_comment, demo_calc_html, demo_calc_state_json, demo_extra_expenses_df, demo_kpi_html] + criterion_radios + criterion_comments + [sale_date, sale_manager, sale_client, sale_comment, sale_rows_df, sale_kpi_html, sale_product_search, sale_product_select, premium_date, premium_manager, premium_comment, premium_sales_df, premium_demos_df, premium_kpi_html]
 
