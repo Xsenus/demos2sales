@@ -520,6 +520,7 @@ def build_demo_calc_html(raw_state, settings):
   border-radius:var(--calc-radius-md);
   background:#fff;
   max-width:100%;
+  -webkit-overflow-scrolling:touch;
 }}
 #{root_id} .calc-table {{
   width:100%;
@@ -559,12 +560,21 @@ def build_demo_calc_html(raw_state, settings):
   vertical-align:middle;
 }}
 #{root_id} .calc-table td:first-child {{
-  background:inherit;
+  background:#fff;
+  left:0;
+  position:sticky;
+  z-index:1;
 }}
 #{root_id} .calc-table tbody tr:nth-child(even) td {{
   background:#fcfdff;
 }}
+#{root_id} .calc-table tbody tr:nth-child(even) td:first-child {{
+  background:#fcfdff;
+}}
 #{root_id} .calc-table tbody tr:hover td {{
+  background:var(--calc-primary-soft);
+}}
+#{root_id} .calc-table tbody tr:hover td:first-child {{
   background:var(--calc-primary-soft);
 }}
 #{root_id} .calc-table tbody tr:hover .blue-cell {{
@@ -580,6 +590,7 @@ def build_demo_calc_html(raw_state, settings):
   line-height:1.3;
   text-align:left;
   white-space:normal;
+  box-shadow:1px 0 0 #eef2f7;
 }}
 #{root_id} .money-cell,
 #{root_id} .qty-cell,
@@ -594,6 +605,7 @@ def build_demo_calc_html(raw_state, settings):
   color:#0c4a6e;
   font-weight:850;
   min-width:78px;
+  min-height:32px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.62);
   cursor:text;
   transition:background .16s ease, border-color .16s ease, box-shadow .16s ease;
@@ -622,6 +634,7 @@ def build_demo_calc_html(raw_state, settings):
   color:#991b1b;
   font-weight:850;
   min-width:92px;
+  min-height:32px;
 }}
 #{root_id} .formula-cell {{
   background:var(--calc-gray-soft);
@@ -629,6 +642,7 @@ def build_demo_calc_html(raw_state, settings):
   color:#475569;
   font-weight:750;
   min-width:92px;
+  min-height:32px;
 }}
 #{root_id} .row-auto td {{ background:var(--calc-gray-soft); }}
 #{root_id} .row-auto .formula-cell {{ background:var(--calc-gray); }}
@@ -641,6 +655,9 @@ def build_demo_calc_html(raw_state, settings):
   font-weight:900;
   font-size:14px;
   height:52px;
+}}
+#{root_id} .row-total td:first-child {{
+  background:linear-gradient(180deg,#eff6ff 0%,#dbeafe 100%) !important;
 }}
 #{root_id} .row-total .col-article {{
   color:var(--calc-primary-dark);
