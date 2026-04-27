@@ -1808,24 +1808,25 @@ def build_css(settings=None):
     }}
 
     .gradio-container {{
-      background:
-        radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 32rem),
-        linear-gradient(180deg, #FFFFFF 0%, var(--color-bg) 26rem) !important;
+      background: #FFFFFF !important;
       color: var(--color-text) !important;
       font-family: {font}, sans-serif !important;
       font-size: var(--font-base) !important;
       line-height: 1.5 !important;
       max-width: 100% !important;
       min-height: 100vh !important;
-      padding: var(--space-5) !important;
+      padding: 10px 20px 0 !important;
       width: 100% !important;
     }}
 
+    html,
     body,
     #root,
+    gradio-app,
     .gradio-container,
     .gradio-container > .main,
     .gradio-container .main {{
+      background: #FFFFFF !important;
       max-width: none !important;
       width: 100% !important;
     }}
@@ -2035,13 +2036,16 @@ def build_css(settings=None):
 
     .login-shell {{
       align-items: center !important;
+      background: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
       display: flex !important;
       flex-direction: column !important;
-      justify-content: center !important;
+      justify-content: flex-start !important;
       max-width: none !important;
       margin: 0 !important;
-      min-height: calc(100vh - 40px) !important;
-      padding: 8px 0 !important;
+      min-height: auto !important;
+      padding: 0 0 10px !important;
       width: 100% !important;
     }}
 
@@ -2053,9 +2057,9 @@ def build_css(settings=None):
       background:
         radial-gradient(circle at 88% 18%, rgba(16,185,129,.16), transparent 22rem),
         linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 58%, #F8FAFC 100%) !important;
-      box-shadow: var(--shadow-md) !important;
-      padding: 24px 30px !important;
-      margin: 0 auto var(--space-4) !important;
+      box-shadow: var(--shadow-sm) !important;
+      padding: 18px 24px !important;
+      margin: 0 auto 10px !important;
       max-width: 1120px !important;
       width: 100% !important;
     }}
@@ -2089,7 +2093,7 @@ def build_css(settings=None):
 
     .login-hero h1 {{
       color: var(--color-text) !important;
-      font-size: 30px !important;
+      font-size: 26px !important;
       line-height: 1.05 !important;
       letter-spacing: -.04em !important;
       margin: 0 0 6px !important;
@@ -2098,7 +2102,7 @@ def build_css(settings=None):
 
     .login-hero h2 {{
       color: var(--color-primary-dark) !important;
-      font-size: 18px !important;
+      font-size: 15px !important;
       line-height: 1.2 !important;
       letter-spacing: -.02em !important;
       margin: 0 0 8px !important;
@@ -2107,8 +2111,8 @@ def build_css(settings=None):
 
     .login-hero p {{
       color: var(--color-muted) !important;
-      font-size: 13px !important;
-      line-height: 1.45 !important;
+      font-size: 12px !important;
+      line-height: 1.4 !important;
       margin: 0 !important;
       max-width: 640px !important;
     }}
@@ -2118,14 +2122,14 @@ def build_css(settings=None):
       gap: var(--space-5) !important;
       justify-content: center !important;
       margin: 0 auto !important;
-      max-width: 600px !important;
+      max-width: 420px !important;
       width: 100% !important;
     }}
 
     .login-grid > .column,
     .login-grid > div {{
-      flex: 0 1 560px !important;
-      max-width: 560px !important;
+      flex: 0 1 420px !important;
+      max-width: 420px !important;
       min-width: 0 !important;
       width: 100% !important;
     }}
@@ -2137,7 +2141,7 @@ def build_css(settings=None):
       border-radius: var(--radius-xl) !important;
       box-shadow: var(--shadow-sm) !important;
       color: var(--color-text) !important;
-      padding: 24px !important;
+      padding: 20px !important;
     }}
 
     .login-card {{
@@ -2151,8 +2155,10 @@ def build_css(settings=None):
       align-items: flex-start !important;
       display: flex !important;
       gap: var(--space-3) !important;
-      justify-content: space-between !important;
-      margin-bottom: var(--space-5) !important;
+      justify-content: center !important;
+      margin-bottom: var(--space-4) !important;
+      padding-right: 34px !important;
+      text-align: center !important;
     }}
 
     .login-card-title {{
@@ -2189,6 +2195,9 @@ def build_css(settings=None):
       height: 34px !important;
       justify-content: center !important;
       line-height: 1 !important;
+      position: absolute !important;
+      right: 18px !important;
+      top: 18px !important;
       transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
       width: 34px !important;
     }}
@@ -2250,14 +2259,14 @@ def build_css(settings=None):
     .login-field input,
     .login-field textarea {{
       font-size: 15px !important;
-      min-height: 48px !important;
-      padding: 12px 14px !important;
+      min-height: 42px !important;
+      padding: 10px 12px !important;
     }}
 
     .login-submit button,
     .login-submit > button {{
       width: 100% !important;
-      min-height: 48px !important;
+      min-height: 42px !important;
       background: var(--color-primary) !important;
       border-color: var(--color-primary) !important;
       color: #FFFFFF !important;
@@ -3456,7 +3465,17 @@ def build_css(settings=None):
 
     .gradio-container footer,
     .gradio-container .footer {{
-      display: none !important;
+      align-items: center !important;
+      background: transparent !important;
+      border: 0 !important;
+      color: var(--color-muted) !important;
+      display: flex !important;
+      gap: var(--space-2) !important;
+      justify-content: center !important;
+      margin-top: 10px !important;
+      padding: 8px 0 0 !important;
+      position: static !important;
+      z-index: 0 !important;
     }}
 
     .gradio-container footer a,
@@ -3957,11 +3976,11 @@ def build_css(settings=None):
       }}
 
       .login-hero {{
-        padding: 28px !important;
+        padding: 18px 22px !important;
       }}
 
       .login-hero h1 {{
-        font-size: 30px !important;
+        font-size: 26px !important;
       }}
 
       .login-access-list {{
