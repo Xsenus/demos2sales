@@ -1112,6 +1112,17 @@ def authenticate(login, password):
     return None
 
 
+def restore_browser_user(browser_user):
+    """Восстанавливает пользователя из BrowserState после перезагрузки страницы."""
+    if not isinstance(browser_user, dict):
+        return None
+    login = str(browser_user.get("login") or "").strip().lower()
+    user = USERS.get(login)
+    if not user:
+        return None
+    return {k: v for k, v in user.items() if k != "password"}
+
+
 def visible_actions(user, manager_filter="__all__"):
     if not user:
         return []
@@ -1416,13 +1427,29 @@ def normalize_demo_ui(calc_state_json, extra_expenses_df, settings):
 def on_login(login, password):
     user = authenticate(login, password)
     if not user:
-        return None, gr.update(visible=True), gr.update(visible=False), "<div class='warning-red'>Неверный логин или пароль.</div>", "", gr.update(choices=[], value=None), gr.update(visible=False), gr.update(visible=False)
+        return None, None, gr.update(visible=True), gr.update(visible=False), "<div class='warning-red'>Неверный логин или пароль.</div>", "", gr.update(choices=[], value=None), gr.update(visible=False), gr.update(visible=False)
     director = is_director(user)
     choices = action_choices(user, "__all__" if director else user["login"])
     selected = choices[0] if choices else None
     role = "Директор" if director else "Менеджер"
     badge = f"<div class='top-badge'><span class='user-avatar'>{user['name'][:1]}</span><span><b>{user['name']}</b><small>{role}</small></span></div>"
-    return user, gr.update(visible=False), gr.update(visible=True), "", badge, gr.update(choices=choices, value=selected), gr.update(visible=director, interactive=director, value="__all__"), gr.update(visible=director, interactive=director)
+    return user, user, gr.update(visible=False), gr.update(visible=True), "", badge, gr.update(choices=choices, value=selected), gr.update(visible=director, interactive=director, value="__all__"), gr.update(visible=director, interactive=director)
+
+
+def restore_login_from_browser(browser_user):
+    user = restore_browser_user(browser_user)
+    if not user:
+        return None, None, gr.update(visible=True), gr.update(visible=False), "", "", gr.update(choices=[], value=None), gr.update(visible=False), gr.update(visible=False)
+    director = is_director(user)
+    choices = action_choices(user, "__all__" if director else user["login"])
+    selected = choices[0] if choices else None
+    role = "Директор" if director else "Менеджер"
+    badge = f"<div class='top-badge'><span class='user-avatar'>{user['name'][:1]}</span><span><b>{user['name']}</b><small>{role}</small></span></div>"
+    return user, user, gr.update(visible=False), gr.update(visible=True), "", badge, gr.update(choices=choices, value=selected), gr.update(visible=director, interactive=director, value="__all__"), gr.update(visible=director, interactive=director)
+
+
+def logout_user():
+    return None, None, gr.update(visible=True), gr.update(visible=False), "", "", gr.update(choices=[], value=None), gr.update(visible=False, value="__all__"), gr.update(visible=False)
 
 
 def load_action_details(user, choice):
@@ -1783,6 +1810,16 @@ def build_css(settings=None):
       max-width: 100% !important;
       min-height: 100vh !important;
       padding: var(--space-5) !important;
+      width: 100% !important;
+    }}
+
+    body,
+    #root,
+    .gradio-container,
+    .gradio-container > .main,
+    .gradio-container .main {{
+      max-width: none !important;
+      width: 100% !important;
     }}
 
     .gradio-container *,
@@ -1989,9 +2026,10 @@ def build_css(settings=None):
     }}
 
     .login-shell {{
-      max-width: 1120px !important;
-      margin: 0 auto !important;
+      max-width: none !important;
+      margin: 0 !important;
       padding: 8px 0 24px !important;
+      width: 100% !important;
     }}
 
     .login-hero {{
@@ -2208,8 +2246,9 @@ def build_css(settings=None):
     }}
 
     .dashboard-shell {{
-      max-width: 1480px !important;
-      margin: 0 auto !important;
+      max-width: none !important;
+      margin: 0 !important;
+      width: 100% !important;
     }}
 
     .dashboard-topbar {{
@@ -2310,6 +2349,29 @@ def build_css(settings=None):
       margin: 0 !important;
       padding: 9px 10px !important;
       width: 100% !important;
+    }}
+
+    .profile-actions {{
+      align-items: stretch !important;
+      gap: var(--space-2) !important;
+    }}
+
+    .profile-actions > .column:first-child {{
+      min-width: 0 !important;
+    }}
+
+    .logout-button button {{
+      background: #FFFFFF !important;
+      border-color: var(--color-border) !important;
+      color: var(--color-muted) !important;
+      min-height: 54px !important;
+      width: 100% !important;
+    }}
+
+    .logout-button button:hover {{
+      background: var(--color-error-soft) !important;
+      border-color: rgba(239, 68, 68, .28) !important;
+      color: #B91C1C !important;
     }}
 
     .top-badge .user-avatar {{
@@ -3356,17 +3418,46 @@ def build_css(settings=None):
       padding: 0 !important;
     }}
 
+    .action-list .wrap,
+    .action-list .wrap > div,
+    .action-list [role="radiogroup"] {{
+      display: flex !important;
+      flex-direction: column !important;
+      gap: var(--space-2) !important;
+      width: 100% !important;
+    }}
+
     .action-list label {{
+      align-items: flex-start !important;
       border: 1px solid var(--color-border) !important;
       border-radius: var(--radius-md) !important;
       background: #FFFFFF !important;
       color: var(--color-text) !important;
+      display: flex !important;
       font-size: var(--font-sm) !important;
+      gap: var(--space-2) !important;
       line-height: 1.35 !important;
       margin-bottom: var(--space-2) !important;
       min-height: 76px !important;
       padding: 12px 12px 12px 14px !important;
       transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+      white-space: pre-line !important;
+      width: 100% !important;
+    }}
+
+    .action-list label span,
+    .action-list label p,
+    .action-list label *:not(input),
+    .action-list [data-testid="radio"] span {{
+      color: var(--color-text) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.35 !important;
+      white-space: pre-line !important;
+    }}
+
+    .action-list input[type="radio"] {{
+      flex: 0 0 auto !important;
+      margin-top: 2px !important;
     }}
 
     .action-list label:hover {{
@@ -3884,6 +3975,7 @@ if gradio_has_kwarg(gr.Blocks.launch, "allowed_paths"):
 with gr.Blocks(**BLOCKS_KWARGS) as app:
     gr.HTML(f"<style>{APP_CSS}</style>")
     current_user = gr.State(None)
+    browser_user = gr.BrowserState(None, storage_key="demos2sales_current_user")
     current_action_id = gr.State("")
     gr.HTML("""
     <div class="calc-header">
@@ -3948,7 +4040,11 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                 """)
             with gr.Column(scale=5):
                 gr.HTML(f"<div class='dashboard-system-status'><span>Статус системы</span><b>{INIT_STATUS}</b></div>")
-                user_badge = gr.HTML("")
+                with gr.Row(elem_classes=["profile-actions"]):
+                    with gr.Column(scale=4, min_width=0):
+                        user_badge = gr.HTML("")
+                    with gr.Column(scale=1, min_width=88):
+                        logout_btn = gr.Button("Выйти", elem_classes=["logout-button"])
         with gr.Tabs(elem_classes=["dashboard-tabs"]):
             with gr.Tab("Действия"):
                 with gr.Row(elem_classes=["actions-layout"]):
@@ -4215,7 +4311,11 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
 
     detail_outputs = [current_action_id, demo_group, sale_group, premium_group, director_confirmed, confirmed_amount, director_comment, demo_client, demo_date, demo_manager, demo_city, demo_model, demo_task, demo_comment, demo_calc_html, demo_calc_state_json, demo_extra_expenses_df, demo_kpi_html] + criterion_radios + criterion_comments + [sale_date, sale_manager, sale_client, sale_comment, sale_rows_df, sale_kpi_html, sale_product_search, sale_product_select, premium_date, premium_manager, premium_comment, premium_sales_df, premium_demos_df, premium_kpi_html]
 
-    login_btn.click(on_login, inputs=[login_input, password_input], outputs=[current_user, login_group, app_group, login_error, user_badge, action_list, manager_filter, manager_to_add]).then(load_action_details, inputs=[current_user, action_list], outputs=detail_outputs)
+    login_session_outputs = [browser_user, current_user, login_group, app_group, login_error, user_badge, action_list, manager_filter, manager_to_add]
+
+    app.load(restore_login_from_browser, inputs=[browser_user], outputs=login_session_outputs, show_progress="hidden").then(load_action_details, inputs=[current_user, action_list], outputs=detail_outputs, show_progress="hidden")
+    login_btn.click(on_login, inputs=[login_input, password_input], outputs=login_session_outputs).then(load_action_details, inputs=[current_user, action_list], outputs=detail_outputs)
+    logout_btn.click(logout_user, outputs=login_session_outputs)
     manager_filter.change(refresh_actions, inputs=[current_user, manager_filter], outputs=[action_list]).then(load_action_details, inputs=[current_user, action_list], outputs=detail_outputs)
     action_list.change(load_action_details, inputs=[current_user, action_list], outputs=detail_outputs)
 
