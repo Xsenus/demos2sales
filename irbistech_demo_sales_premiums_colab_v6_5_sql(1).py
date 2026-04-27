@@ -2034,9 +2034,14 @@ def build_css(settings=None):
     }}
 
     .login-shell {{
+      align-items: center !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
       max-width: none !important;
       margin: 0 !important;
-      padding: 8px 0 24px !important;
+      min-height: calc(100vh - 40px) !important;
+      padding: 8px 0 !important;
       width: 100% !important;
     }}
 
@@ -2049,8 +2054,10 @@ def build_css(settings=None):
         radial-gradient(circle at 88% 18%, rgba(16,185,129,.16), transparent 22rem),
         linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 58%, #F8FAFC 100%) !important;
       box-shadow: var(--shadow-md) !important;
-      padding: 34px 38px !important;
-      margin-bottom: var(--space-5) !important;
+      padding: 24px 30px !important;
+      margin: 0 auto var(--space-4) !important;
+      max-width: 1120px !important;
+      width: 100% !important;
     }}
 
     .login-hero::after {{
@@ -2082,38 +2089,49 @@ def build_css(settings=None):
 
     .login-hero h1 {{
       color: var(--color-text) !important;
-      font-size: 34px !important;
+      font-size: 30px !important;
       line-height: 1.05 !important;
       letter-spacing: -.04em !important;
-      margin: 18px 0 8px !important;
+      margin: 0 0 6px !important;
       font-weight: 900 !important;
     }}
 
     .login-hero h2 {{
       color: var(--color-primary-dark) !important;
-      font-size: 22px !important;
+      font-size: 18px !important;
       line-height: 1.2 !important;
       letter-spacing: -.02em !important;
-      margin: 0 0 12px !important;
+      margin: 0 0 8px !important;
       font-weight: 850 !important;
     }}
 
     .login-hero p {{
       color: var(--color-muted) !important;
-      font-size: 15px !important;
-      line-height: 1.6 !important;
+      font-size: 13px !important;
+      line-height: 1.45 !important;
       margin: 0 !important;
-      max-width: 720px !important;
+      max-width: 640px !important;
     }}
 
     .login-grid {{
       align-items: stretch !important;
       gap: var(--space-5) !important;
+      justify-content: center !important;
+      margin: 0 auto !important;
+      max-width: 600px !important;
+      width: 100% !important;
+    }}
+
+    .login-grid > .column,
+    .login-grid > div {{
+      flex: 0 1 560px !important;
+      max-width: 560px !important;
+      min-width: 0 !important;
+      width: 100% !important;
     }}
 
     .login-card,
-    .login-access-card,
-    .login-status-card {{
+    .login-access-card {{
       background: var(--color-card) !important;
       border: 1px solid var(--color-border) !important;
       border-radius: var(--radius-xl) !important;
@@ -2125,9 +2143,15 @@ def build_css(settings=None):
     .login-card {{
       min-height: 100% !important;
       box-shadow: var(--shadow-md) !important;
+      position: relative !important;
+      width: 100% !important;
     }}
 
     .login-card-header {{
+      align-items: flex-start !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+      justify-content: space-between !important;
       margin-bottom: var(--space-5) !important;
     }}
 
@@ -2145,6 +2169,82 @@ def build_css(settings=None):
       font-size: var(--font-md) !important;
       line-height: 1.5 !important;
       margin: 0 !important;
+    }}
+
+    .login-help-toggle {{
+      display: none !important;
+    }}
+
+    .login-help-button {{
+      align-items: center !important;
+      background: var(--color-primary-soft) !important;
+      border: 1px solid rgba(37,99,235,.20) !important;
+      border-radius: 999px !important;
+      color: var(--color-primary-dark) !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      flex: 0 0 34px !important;
+      font-size: 16px !important;
+      font-weight: 900 !important;
+      height: 34px !important;
+      justify-content: center !important;
+      line-height: 1 !important;
+      transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+      width: 34px !important;
+    }}
+
+    .login-help-button:hover {{
+      background: #DBEAFE !important;
+      border-color: rgba(37,99,235,.34) !important;
+      box-shadow: var(--shadow-focus) !important;
+    }}
+
+    .login-access-modal {{
+      align-items: center !important;
+      background: rgba(15,23,42,.36) !important;
+      display: none !important;
+      inset: 0 !important;
+      justify-content: center !important;
+      padding: 20px !important;
+      position: fixed !important;
+      z-index: 1000 !important;
+    }}
+
+    .login-help-toggle:checked ~ .login-access-modal {{
+      display: flex !important;
+    }}
+
+    .login-access-modal-card {{
+      background: #FFFFFF !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-md) !important;
+      max-width: 520px !important;
+      padding: 22px !important;
+      width: 100% !important;
+    }}
+
+    .login-access-modal-head {{
+      align-items: flex-start !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-3) !important;
+    }}
+
+    .login-modal-close {{
+      align-items: center !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: 999px !important;
+      color: var(--color-muted) !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      flex: 0 0 30px !important;
+      font-size: 18px !important;
+      height: 30px !important;
+      justify-content: center !important;
+      line-height: 1 !important;
+      width: 30px !important;
     }}
 
     .login-field input,
@@ -3356,13 +3456,7 @@ def build_css(settings=None):
 
     .gradio-container footer,
     .gradio-container .footer {{
-      background: transparent !important;
-      border: 0 !important;
-      color: var(--color-muted) !important;
-      margin-top: var(--space-6) !important;
-      padding: var(--space-4) 0 0 !important;
-      position: static !important;
-      z-index: 0 !important;
+      display: none !important;
     }}
 
     .gradio-container footer a,
@@ -4209,44 +4303,42 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
     with gr.Group(visible=True, elem_classes=["login-shell"]) as login_group:
         gr.HTML("""
         <section class="login-hero">
-          <div class="login-eyebrow">Рабочая панель</div>
           <h1>ИРБИСТЕХ</h1>
           <h2>Демонстрации, продажи и премии</h2>
           <p>Единое рабочее пространство для учета действий менеджеров, расчета смет демонстраций, продаж оборудования и подтверждения премий директором.</p>
         </section>
         """)
         with gr.Row(elem_classes=["login-grid"]):
-            with gr.Column(scale=6, elem_classes=["login-card"]):
+            with gr.Column(elem_classes=["login-card"]):
                 gr.HTML("""
+                <input class="login-help-toggle" type="checkbox" id="login-help-toggle" />
                 <div class="login-card-header">
                   <div class="login-card-title">Вход в систему</div>
-                  <p class="login-card-subtitle">Используйте рабочий логин и пароль, чтобы открыть действия, расчеты и подтверждения.</p>
+                  <label class="login-help-button" for="login-help-toggle" title="Показать тестовые доступы">?</label>
+                </div>
+                <div class="login-access-modal">
+                  <div class="login-access-modal-card">
+                    <div class="login-access-modal-head">
+                      <div>
+                        <div class="login-muted-title">Тестовые доступы</div>
+                        <p class="login-muted-text">Демо-учетные записи для проверки ролей директора и менеджеров.</p>
+                      </div>
+                      <label class="login-modal-close" for="login-help-toggle" title="Закрыть">×</label>
+                    </div>
+                    <div class="login-access-list">
+                      <div class="login-access-item"><b>artur</b> / 123</div>
+                      <div class="login-access-item"><b>ruslan</b> / 111</div>
+                      <div class="login-access-item"><b>timur</b> / 222</div>
+                      <div class="login-access-item"><b>maria</b> / 333</div>
+                      <div class="login-access-item"><b>ildar</b> / 444</div>
+                    </div>
+                  </div>
                 </div>
                 """)
                 login_input = gr.Textbox(label="Логин", value="", placeholder="Например: artur", elem_classes=["login-field"])
                 password_input = gr.Textbox(label="Пароль", type="password", value="", placeholder="Введите пароль", elem_classes=["login-field"])
                 login_btn = gr.Button("Войти", variant="primary", elem_classes=["login-submit"])
                 login_error = gr.HTML("", elem_classes=["login-error-slot"])
-            with gr.Column(scale=5, elem_classes=["login-side-column"]):
-                gr.HTML(f"""
-                <div class="login-status-card">
-                  <div class="login-status-label">Статус данных</div>
-                  <div class="login-status-body">{INIT_STATUS}</div>
-                </div>
-                """)
-                gr.HTML("""
-                <div class="login-access-card">
-                  <div class="login-muted-title">Тестовые доступы</div>
-                  <p class="login-muted-text">Демо-учетные записи для проверки ролей директора и менеджеров.</p>
-                  <div class="login-access-list">
-                    <div class="login-access-item"><b>artur</b> / 123</div>
-                    <div class="login-access-item"><b>ruslan</b> / 111</div>
-                    <div class="login-access-item"><b>timur</b> / 222</div>
-                    <div class="login-access-item"><b>maria</b> / 333</div>
-                    <div class="login-access-item"><b>ildar</b> / 444</div>
-                  </div>
-                </div>
-                """)
 
     with gr.Group(visible=False, elem_classes=["dashboard-shell"]) as app_group:
         with gr.Row(elem_classes=["dashboard-topbar"]):
