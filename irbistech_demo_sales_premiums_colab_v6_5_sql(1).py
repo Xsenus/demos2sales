@@ -10,6 +10,7 @@
 import os
 import sys
 import json
+import html
 import math
 import uuid
 import subprocess
@@ -1112,6 +1113,19 @@ def calculate_premium(action, state, settings):
 APP_STATE, INIT_STATUS = load_state_from_db()
 
 
+def init_db_connected_from_message(msg: str) -> bool:
+    """True, если при старте данные успешно пришли из PostgreSQL (или БД была пуста и засеяна)."""
+    t = (msg or "").strip()
+    if "Данные загружены из PostgreSQL" in t:
+        return True
+    if "База была пустой" in t and "демо" in t.lower():
+        return True
+    return False
+
+
+INIT_DB_CONNECTED = init_db_connected_from_message(INIT_STATUS)
+
+
 def find_action(action_id):
     for a in APP_STATE.get("actions", []):
         if a.get("id") == action_id:
@@ -1439,6 +1453,39 @@ def normalize_demo_ui(calc_state_json, extra_expenses_df, settings):
     return expenses, demo_html, demo_state_json, extra_df
 
 
+def format_user_badge_html(user):
+    name = str(user.get("name") or "")
+    initial = html.escape(name[:1] or "?", quote=True)
+    name_esc = html.escape(name, quote=True)
+    director = is_director(user)
+    role = "Директор" if director else "Менеджер"
+    role_esc = html.escape(role, quote=True)
+    login_id = str(user.get("login") or user.get("email") or "").strip()
+    meta_esc = html.escape(login_id, quote=True) if login_id else role_esc
+    return (
+        f'<div class="irbis-profile-wrap">'
+        f'<input type="checkbox" id="irbis-profile-menu" class="irbis-profile-menu-cb" autocomplete="off" />'
+        f'<label class="irbis-profile-scrim" for="irbis-profile-menu" aria-hidden="true"></label>'
+        f'<label class="top-badge dashboard-profile-badge" for="irbis-profile-menu">'
+        f'<span class="user-avatar">{initial}</span>'
+        f'<span class="dashboard-profile-text"><b>{name_esc}</b><small>{role_esc}</small></span>'
+        f"</label>"
+        f'<div class="irbis-profile-dropdown" role="menu" aria-hidden="true">'
+        f'<div class="irbis-dd-user">'
+        f'<span class="irbis-dd-avatar">{initial}</span>'
+        f'<span class="irbis-dd-user-text"><strong>{name_esc}</strong>'
+        f'<span class="irbis-dd-meta">{meta_esc}</span></span>'
+        f'</div>'
+        f'<div class="irbis-dd-items" role="none">'
+        f'<div class="irbis-dd-item" role="menuitem"><span class="irbis-dd-item-mark">К</span><span>Профиль компании</span></div>'
+        f'<div class="irbis-dd-item" role="menuitem"><span class="irbis-dd-item-mark">П</span><span>Ваш профиль</span></div>'
+        f'</div>'
+        f'<div class="irbis-dd-footer-slot" aria-hidden="true"></div>'
+        f"</div>"
+        f"</div>"
+    )
+
+
 def on_login(login, password):
     user = authenticate(login, password)
     if not user:
@@ -1446,8 +1493,7 @@ def on_login(login, password):
     director = is_director(user)
     choices = action_choices(user, "__all__" if director else user["login"])
     selected = choices[0] if choices else None
-    role = "Директор" if director else "Менеджер"
-    badge = f"<div class='top-badge'><span class='user-avatar'>{user['name'][:1]}</span><span><b>{user['name']}</b><small>{role}</small></span></div>"
+    badge = format_user_badge_html(user)
     return user, user, gr.update(visible=False), gr.update(visible=True), "", badge, gr.update(choices=choices, value=selected), gr.update(visible=director, interactive=director, value="__all__"), gr.update(visible=director, interactive=director)
 
 
@@ -1458,8 +1504,7 @@ def restore_login_from_browser(browser_user):
     director = is_director(user)
     choices = action_choices(user, "__all__" if director else user["login"])
     selected = choices[0] if choices else None
-    role = "Директор" if director else "Менеджер"
-    badge = f"<div class='top-badge'><span class='user-avatar'>{user['name'][:1]}</span><span><b>{user['name']}</b><small>{role}</small></span></div>"
+    badge = format_user_badge_html(user)
     return user, user, gr.update(visible=False), gr.update(visible=True), "", badge, gr.update(choices=choices, value=selected), gr.update(visible=director, interactive=director, value="__all__"), gr.update(visible=director, interactive=director)
 
 
@@ -2681,6 +2726,7 @@ def build_css(settings=None):
     }}
 
     .dashboard-shell {{
+      background: transparent !important;
       box-sizing: border-box !important;
       margin: 0 auto !important;
       max-width: none !important;
@@ -2688,19 +2734,107 @@ def build_css(settings=None):
       width: 100% !important;
     }}
 
+    body:has(#irbis-app-shell:not(.hide)) .gradio-container,
+    body:has(#irbis-app-shell:not(.hide)) .gradio-container .main,
+    body:has(#irbis-app-shell:not(.hide)) .gradio-container main,
+    body:has(#irbis-app-shell:not(.hide)) .gradio-container .main .fillable,
+    body:has(#irbis-app-shell:not(.hide)) .gradio-container .main .wrap,
+    body:has(#irbis-app-shell:not(.hide)) .gradio-container .main .app {{
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+    }}
+
+    body:has(#irbis-app-shell:not(.hide)) #irbis-app-shell.gr-group,
+    body:has(#irbis-app-shell:not(.hide)) #irbis-app-shell.dashboard-shell,
+    body:has(#irbis-app-shell:not(.hide)) .dashboard-shell.gr-group {{
+      --block-border-width: 0 !important;
+      background: transparent !important;
+      border: 0 !important;
+      border-width: 0 !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }}
+
+    body:has(#irbis-app-shell:not(.hide)) #irbis-app-shell.gr-group > .styler,
+    body:has(#irbis-app-shell:not(.hide)) .dashboard-shell.gr-group > .styler {{
+      --block-border-width: 0 !important;
+      background: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }}
+
+    body:has(#irbis-app-shell:not(.hide)) #irbis-app-shell.gr-group,
+    body:has(#irbis-app-shell:not(.hide)) #irbis-app-shell.dashboard-shell {{
+      overflow: visible !important;
+    }}
+
+    #irbis-app-shell [data-testid="tabs"],
+    #irbis-app-shell .tabs {{
+      box-shadow: none !important;
+    }}
+
+    #irbis-app-shell [data-testid="tabs"] > div:not([role="tablist"]),
+    #irbis-app-shell [data-testid="tabs"] .tabitem {{
+      border: 0 !important;
+      box-shadow: none !important;
+      outline: none !important;
+    }}
+
     .dashboard-topbar {{
       align-items: center !important;
-      background: rgba(255, 255, 255, .86) !important;
-      border: 1px solid var(--color-border) !important;
+      background: rgba(255, 255, 255, .96) !important;
+      border: 0 !important;
       border-radius: var(--radius-xl) !important;
-      box-shadow: var(--shadow-sm) !important;
+      box-shadow: none !important;
       gap: var(--space-4) !important;
+      justify-content: space-between !important;
       margin-bottom: var(--space-5) !important;
-      padding: 16px 18px !important;
+      overflow: visible !important;
+      padding: 12px 16px !important;
       position: sticky !important;
       top: 12px !important;
-      z-index: 20 !important;
+      z-index: 50 !important;
       backdrop-filter: blur(12px) !important;
+    }}
+
+    .dashboard-topbar-brand {{
+      flex: 1 1 auto !important;
+      min-width: 0 !important;
+    }}
+
+    .dashboard-topbar-aside {{
+      align-items: center !important;
+      display: flex !important;
+      flex: 0 1 auto !important;
+      flex-direction: column !important;
+      gap: var(--space-2) !important;
+      justify-content: flex-end !important;
+      margin-left: auto !important;
+      min-width: 0 !important;
+      overflow: visible !important;
+    }}
+
+    .dashboard-profile-row {{
+      align-items: center !important;
+      flex-wrap: nowrap !important;
+      gap: 10px !important;
+      justify-content: flex-end !important;
+      margin: 0 !important;
+      min-width: 0 !important;
+      overflow: visible !important;
+      width: 100% !important;
+    }}
+
+    .dashboard-profile-row > .column,
+    .dashboard-profile-row > div[class*="column"] {{
+      flex: 0 1 auto !important;
+      min-width: 0 !important;
+      width: auto !important;
+    }}
+
+    .dashboard-profile-row > .column:first-child,
+    .dashboard-profile-row > div[class*="column"]:first-child {{
+      flex: 0 0 auto !important;
     }}
 
     .dashboard-brand {{
@@ -2739,40 +2873,278 @@ def build_css(settings=None):
       margin-top: 3px !important;
     }}
 
-    .dashboard-system-status {{
+    .dashboard-system-status-wrap {{
       align-items: center !important;
-      background: var(--color-primary-soft) !important;
-      border: 1px solid rgba(37, 99, 235, .18) !important;
-      border-radius: var(--radius-md) !important;
-      color: var(--color-text) !important;
-      display: flex !important;
-      gap: var(--space-2) !important;
-      justify-content: space-between !important;
-      margin-bottom: var(--space-2) !important;
-      padding: 8px 10px !important;
+      cursor: default !important;
+      display: inline-flex !important;
+      flex: 0 0 auto !important;
+      justify-content: center !important;
+      margin: 0 !important;
+      padding: 2px !important;
     }}
 
-    .dashboard-system-status span {{
-      color: var(--color-primary-dark) !important;
-      font-size: 11px !important;
-      font-weight: 850 !important;
-      letter-spacing: .04em !important;
-      text-transform: uppercase !important;
+    .dash-db-dot {{
+      border-radius: 999px !important;
+      display: inline-block !important;
+      flex-shrink: 0 !important;
+      height: 10px !important;
+      width: 10px !important;
+    }}
+
+    .dash-db-dot--ok {{
+      background: #10B981 !important;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, .22) !important;
+    }}
+
+    .dash-db-dot--err {{
+      background: #EF4444 !important;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, .18) !important;
+    }}
+
+    .dashboard-user-block.irbis-profile-menu-anchor {{
+      --irbis-profile-dd-h: 204px !important;
+      --irbis-profile-dd-footer-h: 46px !important;
+      align-items: stretch !important;
+      display: flex !important;
+      flex: 0 1 auto !important;
+      flex-direction: column !important;
+      gap: 0 !important;
+      margin: 0 !important;
+      max-width: min(100%, 320px) !important;
+      min-width: 0 !important;
+      overflow: visible !important;
+      position: relative !important;
+      width: fit-content !important;
+    }}
+
+    .irbis-profile-wrap {{
+      align-self: flex-end !important;
+      max-width: 100% !important;
+      position: static !important;
+      width: fit-content !important;
+      z-index: auto !important;
+    }}
+
+    .dashboard-user-block.irbis-profile-menu-anchor .block:has(#irbis-profile-menu),
+    .dashboard-user-block.irbis-profile-menu-anchor .gr-html:has(#irbis-profile-menu) {{
+      overflow: visible !important;
+      position: relative !important;
+    }}
+
+    .irbis-profile-menu-cb {{
+      height: 1px !important;
+      margin: 0 !important;
+      opacity: 0 !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+      position: absolute !important;
+      width: 1px !important;
+      z-index: -1 !important;
+    }}
+
+    .irbis-profile-scrim {{
+      display: none !important;
+      inset: 0 !important;
+      position: fixed !important;
+      z-index: 19 !important;
+    }}
+
+    .irbis-profile-menu-cb:checked ~ .irbis-profile-scrim {{
+      display: block !important;
+    }}
+
+    .irbis-profile-dropdown {{
+      background: #FFFFFF !important;
+      border: 1px solid rgba(226, 232, 240, .95) !important;
+      border-radius: 18px !important;
+      box-shadow: 0 18px 46px rgba(15, 23, 42, .13), 0 2px 8px rgba(15, 23, 42, .05) !important;
+      box-sizing: border-box !important;
+      display: none !important;
+      flex-direction: column !important;
+      height: var(--irbis-profile-dd-h) !important;
+      left: auto !important;
+      margin-top: 0 !important;
+      max-height: var(--irbis-profile-dd-h) !important;
+      min-height: var(--irbis-profile-dd-h) !important;
+      overflow: hidden !important;
+      position: absolute !important;
+      right: 0 !important;
+      top: calc(100% + 10px) !important;
+      width: min(268px, calc(100vw - 24px)) !important;
+      z-index: 35 !important;
+    }}
+
+    .irbis-profile-menu-cb:checked ~ .irbis-profile-dropdown {{
+      display: flex !important;
+    }}
+
+    .irbis-dd-user {{
+      align-items: center !important;
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+      display: flex !important;
+      flex: 0 0 auto !important;
+      gap: 10px !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      padding: 14px 14px 12px !important;
+      text-align: left !important;
+    }}
+
+    .irbis-dd-avatar {{
+      align-items: center !important;
+      background: var(--color-green-soft) !important;
+      border: 1px solid rgba(16,185,129,.24) !important;
+      border-radius: 999px !important;
+      color: #047857 !important;
+      display: inline-flex !important;
+      flex: 0 0 34px !important;
+      font-size: 13px !important;
+      font-weight: 900 !important;
+      height: 34px !important;
+      justify-content: center !important;
+      width: 34px !important;
+    }}
+
+    .irbis-dd-user-text {{
+      display: block !important;
+      min-width: 0 !important;
+    }}
+
+    .irbis-dd-user strong {{
+      color: #0F172A !important;
+      display: block !important;
+      font-size: 14px !important;
+      font-weight: 800 !important;
+      letter-spacing: -.02em !important;
+      line-height: 1.25 !important;
+      max-width: 100% !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
       white-space: nowrap !important;
     }}
 
-    .dashboard-system-status b {{
-      color: var(--color-text) !important;
+    .irbis-dd-meta {{
+      color: #64748B !important;
+      display: block !important;
       font-size: 12px !important;
-      font-weight: 700 !important;
       line-height: 1.35 !important;
+      margin-top: 4px !important;
+      max-width: 100% !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+    }}
+
+    .irbis-dd-items {{
+      border-top: 1px solid #EEF2F7 !important;
+      flex: 0 0 auto !important;
+      padding: 6px !important;
+    }}
+
+    .irbis-dd-item {{
+      align-items: center !important;
+      border-radius: 12px !important;
+      color: #334155 !important;
+      display: flex !important;
+      font-size: 13px !important;
+      font-weight: 650 !important;
+      gap: 10px !important;
+      min-height: 38px !important;
+      padding: 8px 10px !important;
+    }}
+
+    .irbis-dd-item:hover {{
+      background: #F8FAFC !important;
+    }}
+
+    .irbis-dd-item-mark {{
+      align-items: center !important;
+      background: #F1F5F9 !important;
+      border-radius: 9px !important;
+      color: #64748B !important;
+      display: inline-flex !important;
+      flex: 0 0 24px !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      height: 24px !important;
+      justify-content: center !important;
+      width: 24px !important;
+    }}
+
+    .irbis-dd-footer-slot {{
+      border-top: 1px solid #EEF2F7 !important;
+      flex: 0 0 var(--irbis-profile-dd-footer-h) !important;
+    }}
+
+    .irbis-dd-divider {{
+      background: var(--color-border) !important;
+      height: 1px !important;
+      margin: 0 !important;
+    }}
+
+    .dashboard-profile-badge {{
+      cursor: pointer !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+      width: fit-content !important;
+    }}
+
+    .dashboard-profile-text {{
+      min-width: 0 !important;
       text-align: right !important;
     }}
 
-    .dashboard-system-status .warning-red {{
+    .dashboard-profile-text b {{
+      display: block !important;
+      max-width: 14rem !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+    }}
+
+    .dashboard-user-block.irbis-profile-menu-anchor .logout-button {{
+      left: auto !important;
       margin: 0 !important;
-      padding: 6px 8px !important;
-      font-size: 12px !important;
+      position: absolute !important;
+      right: 0 !important;
+      top: calc(100% + 10px + var(--irbis-profile-dd-h) - var(--irbis-profile-dd-footer-h)) !important;
+      width: min(268px, calc(100vw - 24px)) !important;
+      z-index: 36 !important;
+    }}
+
+    .dashboard-user-block:not(:has(#irbis-profile-menu:checked)) .logout-button {{
+      opacity: 0 !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }}
+
+    .dashboard-user-block:has(#irbis-profile-menu:checked) .logout-button {{
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      visibility: visible !important;
+    }}
+
+    .dashboard-user-block:has(#irbis-profile-menu:checked) .logout-button button {{
+      background: transparent !important;
+      border: 0 !important;
+      border-radius: 0 0 18px 18px !important;
+      box-shadow: none !important;
+      color: #DC2626 !important;
+      font-size: 13px !important;
+      font-weight: 850 !important;
+      justify-content: center !important;
+      min-height: var(--irbis-profile-dd-footer-h) !important;
+      padding: 0 14px !important;
+      width: 100% !important;
+    }}
+
+    .dashboard-user-block:has(#irbis-profile-menu:checked) .logout-button button:hover {{
+      background: #FEF2F2 !important;
+      color: #B91C1C !important;
+    }}
+
+    .dashboard-user-block.irbis-profile-menu-anchor .logout-button button {{
+      min-height: var(--irbis-profile-dd-footer-h) !important;
     }}
 
     .top-badge {{
@@ -2784,8 +3156,8 @@ def build_css(settings=None):
       gap: var(--space-3) !important;
       justify-content: flex-end !important;
       margin: 0 !important;
-      padding: 9px 10px !important;
-      width: 100% !important;
+      padding: 8px 10px !important;
+      width: fit-content !important;
     }}
 
     .profile-actions {{
@@ -2801,7 +3173,7 @@ def build_css(settings=None):
       background: #FFFFFF !important;
       border-color: var(--color-border) !important;
       color: var(--color-muted) !important;
-      min-height: 54px !important;
+      min-height: 40px !important;
       width: 100% !important;
     }}
 
@@ -3942,6 +4314,14 @@ def build_css(settings=None):
       margin-bottom: var(--space-4) !important;
     }}
 
+    #irbis-app-shell [data-testid="tabs"] .tabs,
+    #irbis-app-shell [data-testid="tabs"] [role="tablist"],
+    #irbis-app-shell .tabs.dashboard-tabs,
+    #irbis-app-shell [role="tablist"] {{
+      border: 0 !important;
+      box-shadow: none !important;
+    }}
+
     .gradio-container [role="tab"],
     .gradio-container button[role="tab"] {{
       background: transparent !important;
@@ -4343,13 +4723,21 @@ def build_css(settings=None):
         overflow: visible !important;
       }}
 
-      .dashboard-system-status {{
-        align-items: flex-start !important;
+      .dashboard-topbar-aside {{
+        align-items: stretch !important;
         flex-direction: column !important;
+        gap: var(--space-3) !important;
+        margin-left: 0 !important;
+        width: 100% !important;
       }}
 
-      .dashboard-system-status b {{
-        text-align: left !important;
+      .dashboard-profile-row {{
+        flex-wrap: wrap !important;
+        justify-content: flex-end !important;
+      }}
+
+      .dashboard-system-status-wrap {{
+        align-self: flex-end !important;
       }}
 
       .profile-actions {{
@@ -4709,10 +5097,18 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                 login_btn = gr.Button("Войти", variant="primary", elem_classes=["login-submit"])
                 login_error = gr.HTML("", elem_classes=["login-error-slot"])
 
-    with gr.Group(visible=False, elem_classes=["dashboard-shell"]) as app_group:
+    _init_status_esc = html.escape(INIT_STATUS, quote=True)
+    _db_dot_class = "dash-db-dot dash-db-dot--ok" if INIT_DB_CONNECTED else "dash-db-dot dash-db-dot--err"
+    _dashboard_status_html = (
+        f"<div class='dashboard-system-status-wrap' title='{_init_status_esc}'>"
+        f"<span class='{_db_dot_class}' role='status' aria-label='{_init_status_esc}'></span>"
+        f"</div>"
+    )
+
+    with gr.Group(visible=False, elem_id="irbis-app-shell", elem_classes=["dashboard-shell"]) as app_group:
         with gr.Row(elem_classes=["dashboard-topbar"]):
-            with gr.Column(scale=7):
-                gr.HTML(f"""
+            with gr.Column(scale=7, min_width=0, elem_classes=["dashboard-topbar-brand"]):
+                gr.HTML("""
                 <div class="dashboard-brand">
                   <div class="dashboard-logo">И</div>
                   <div>
@@ -4721,12 +5117,11 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                   </div>
                 </div>
                 """)
-            with gr.Column(scale=5):
-                gr.HTML(f"<div class='dashboard-system-status'><span>Статус системы</span><b>{INIT_STATUS}</b></div>")
-                with gr.Row(elem_classes=["profile-actions"]):
-                    with gr.Column(scale=4, min_width=0):
+            with gr.Column(scale=5, min_width=0, elem_classes=["dashboard-topbar-aside"]):
+                with gr.Row(elem_classes=["dashboard-profile-row"]):
+                    gr.HTML(_dashboard_status_html)
+                    with gr.Column(elem_classes=["dashboard-user-block", "irbis-profile-menu-anchor"]):
                         user_badge = gr.HTML("")
-                    with gr.Column(scale=1, min_width=88):
                         logout_btn = gr.Button("Выйти", elem_classes=["logout-button"])
         with gr.Tabs(elem_classes=["dashboard-tabs"]):
             with gr.Tab("Действия"):
