@@ -1126,7 +1126,7 @@ def visible_actions(user, manager_filter="__all__"):
 
 def action_card_text(a):
     locked = is_action_locked(a, APP_STATE)
-    icon = "🔒" if locked else ("✅" if a.get("is_director_confirmed") else "□")
+    status = "Закрыто премией" if locked else ("Подтверждено" if a.get("is_director_confirmed") else "Ожидает проверки")
     typ = SHORT_TYPE.get(a.get("type"), a.get("type"))
     try:
         if a.get("type") == ACTION_DEMO:
@@ -1140,7 +1140,9 @@ def action_card_text(a):
             amt = to_float(a.get("confirmed_amount"), calc["payout"])
     except Exception:
         amt = 0
-    return f"{icon} {int(a.get('sequence_no',0)):03d} · {typ} · {a.get('date','')} · {user_name(a.get('manager_login'))}\n{a.get('client','')} · {money0(amt)} · ID:{a.get('id')}"
+    client = str(a.get("client") or "Без клиента")
+    manager = user_name(a.get("manager_login"))
+    return f"{typ.upper()} | {status} | {money0(amt)}\n{int(a.get('sequence_no',0)):03d} · {a.get('date','')} · {client} · {manager} · ID:{a.get('id')}"
 
 
 def action_choices(user, manager_filter="__all__"):
@@ -1418,7 +1420,8 @@ def on_login(login, password):
     director = is_director(user)
     choices = action_choices(user, "__all__" if director else user["login"])
     selected = choices[0] if choices else None
-    badge = f"<div class='top-badge'><b>{user['name']}</b><br>Роль: {'Директор' if director else 'Менеджер'}</div>"
+    role = "Директор" if director else "Менеджер"
+    badge = f"<div class='top-badge'><span class='user-avatar'>{user['name'][:1]}</span><span><b>{user['name']}</b><small>{role}</small></span></div>"
     return user, gr.update(visible=False), gr.update(visible=True), "", badge, gr.update(choices=choices, value=selected), gr.update(visible=director, interactive=director, value="__all__"), gr.update(visible=director, interactive=director)
 
 
@@ -1730,11 +1733,58 @@ def build_css(settings=None):
     :root {{
       --font-base: {ui.get('font_base_px',13)}px;
       --font-title: {ui.get('font_title_px',18)}px;
-      --card-pad: {ui.get('card_padding_px',10)}px;
+      --font-sm: 12px;
+      --font-md: 14px;
+      --font-lg: 18px;
+      --font-xl: 24px;
+      --card-pad: max({ui.get('card_padding_px',10)}px, 16px);
       --criteria-row-gap: {ui.get('field_gap_px',8)}px;
       --table-row-height: {ui.get('table_row_height_px',30)}px;
+      --color-bg: #F8FAFC;
+      --color-card: #FFFFFF;
+      --color-primary: #2563EB;
+      --color-primary-dark: #1D4ED8;
+      --color-primary-soft: #EFF6FF;
+      --color-text: #0F172A;
+      --color-muted: #64748B;
+      --color-border: #E2E8F0;
+      --color-border-strong: #CBD5E1;
+      --color-green: #10B981;
+      --color-green-soft: #ECFDF5;
+      --color-warning: #F59E0B;
+      --color-warning-soft: #FFFBEB;
+      --color-error: #EF4444;
+      --color-error-soft: #FEF2F2;
+      --color-surface: #F1F5F9;
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 18px;
+      --radius-xl: 24px;
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .08);
+      --shadow-md: 0 16px 32px rgba(15, 23, 42, .08);
+      --shadow-focus: 0 0 0 4px rgba(37, 99, 235, .14);
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --transition-fast: 160ms ease;
     }}
-    .gradio-container,
+
+    .gradio-container {{
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,.08), transparent 32rem),
+        linear-gradient(180deg, #FFFFFF 0%, var(--color-bg) 26rem) !important;
+      color: var(--color-text) !important;
+      font-family: {font}, sans-serif !important;
+      font-size: var(--font-base) !important;
+      line-height: 1.5 !important;
+      max-width: 100% !important;
+      min-height: 100vh !important;
+      padding: var(--space-5) !important;
+    }}
+
     .gradio-container *,
     .gradio-container table,
     .gradio-container th,
@@ -1744,90 +1794,2046 @@ def build_css(settings=None):
     .gradio-container button,
     .gradio-container select,
     .gradio-container label {{
-      font-family:{font}, sans-serif !important;
-      color:#111111;
+      box-sizing: border-box !important;
+      font-family: {font}, sans-serif !important;
     }}
-    .gradio-container {{ background:#f4f7fb !important; font-size:var(--font-base); }}
-    .calc-header {{ background:linear-gradient(135deg,#0b2f4d 0%,#13527c 62%,#0f8a5f 100%); color:white; border-radius:20px; padding:16px 20px; box-shadow:0 12px 28px rgba(15,23,42,.14); margin-bottom:12px; }}
-    .calc-header h1 {{ margin:0; font-size:24px; color:white !important; }} .calc-header p {{ margin:6px 0 0; opacity:.86; color:white !important; }}
-    .calc-card,.top-badge {{ background:white; border:1px solid #d7e0ec; border-radius:16px; padding:var(--card-pad); box-shadow:0 10px 22px rgba(15,23,42,.06); margin-bottom:10px; }}
-    .calc-section-title {{ font-size:var(--font-title); font-weight:800; color:#123b63 !important; margin-bottom:8px; }}
-    .kpi-grid {{ display:grid; grid-template-columns:repeat(3,minmax(160px,1fr)); gap:8px; }}
-    .kpi-item {{ background:#f8fbff; border:1px solid #d7e0ec; border-radius:12px; padding:8px 10px; }}
-    .kpi-item span {{ display:block; color:#5b6b83 !important; font-size:12px; }} .kpi-item b {{ display:block; color:#0f172a !important; font-size:15px; margin-top:2px; }}
-    .warning-red {{ margin-top:8px; background:rgba(220,38,38,.10); border:1px solid rgba(220,38,38,.35); color:#991b1b !important; padding:10px 12px; border-radius:12px; font-weight:800; }}
-    .action-list textarea, .action-list label {{ font-size:12px !important; }}
-    .gradio-container table th, .gradio-container table td {{ font-family:Arial, sans-serif !important; color:#111111 !important; line-height:1.22 !important; }}
-    .gradio-container [data-testid="dataframe"] textarea,
-    .gradio-container [data-testid="dataframe"] input {{ font-family:Arial, sans-serif !important; color:#111111 !important; min-height:var(--table-row-height) !important; }}
 
-    /* Компактная строка критерия: строгое соотношение в информационном блоке
-       20% — название и описание; 60% — прямоугольники уровней; 20% — комментарий. */
-    .criteria-block-compact {{ margin-top:6px; }}
+    .gradio-container p,
+    .gradio-container label,
+    .gradio-container span,
+    .gradio-container small {{
+      color: inherit;
+    }}
+
+    .gradio-container a {{
+      color: var(--color-primary) !important;
+      text-decoration: none !important;
+    }}
+
+    .gradio-container a:hover {{
+      color: var(--color-primary-dark) !important;
+      text-decoration: underline !important;
+    }}
+
+    .gradio-container > .main,
+    .gradio-container .main {{
+      gap: var(--space-5) !important;
+    }}
+
+    .gradio-container .contain,
+    .gradio-container .block {{
+      border-radius: var(--radius-md) !important;
+    }}
+
+    .gradio-container .form {{
+      background: transparent !important;
+      border: 0 !important;
+      gap: var(--space-4) !important;
+    }}
+
+    .gradio-container .gap,
+    .gradio-container .row,
+    .gradio-container .column {{
+      gap: var(--space-4) !important;
+    }}
+
+    .calc-header {{
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: flex-start !important;
+      gap: var(--space-5) !important;
+      color: #FFFFFF !important;
+      background:
+        linear-gradient(135deg, rgba(15,23,42,.98) 0%, rgba(37,99,235,.96) 58%, rgba(16,185,129,.92) 100%) !important;
+      border: 1px solid rgba(255,255,255,.16) !important;
+      border-radius: var(--radius-xl) !important;
+      padding: 24px 28px !important;
+      box-shadow: var(--shadow-md) !important;
+      margin-bottom: var(--space-5) !important;
+      overflow: hidden !important;
+      position: relative !important;
+    }}
+
+    .calc-header::after {{
+      content: "" !important;
+      position: absolute !important;
+      inset: auto -80px -120px auto !important;
+      width: 260px !important;
+      height: 260px !important;
+      border-radius: 999px !important;
+      background: rgba(255,255,255,.12) !important;
+      pointer-events: none !important;
+    }}
+
+    .calc-header h1 {{
+      color: #FFFFFF !important;
+      font-size: var(--font-xl) !important;
+      line-height: 1.15 !important;
+      letter-spacing: -.03em !important;
+      margin: 0 !important;
+      font-weight: 850 !important;
+    }}
+
+    .calc-header p {{
+      color: rgba(255,255,255,.82) !important;
+      font-size: var(--font-md) !important;
+      margin: var(--space-2) 0 0 !important;
+      max-width: 760px !important;
+    }}
+
+    .calc-card,
+    .top-badge {{
+      background: var(--color-card) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-sm) !important;
+      color: var(--color-text) !important;
+      padding: var(--card-pad) !important;
+      margin-bottom: var(--space-4) !important;
+    }}
+
+    .calc-card:hover,
+    .top-badge:hover {{
+      border-color: var(--color-border-strong) !important;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .07) !important;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+    }}
+
+    .top-badge {{
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: var(--space-3) !important;
+      width: fit-content !important;
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+    }}
+
+    .top-badge b {{
+      display: block !important;
+      color: var(--color-text) !important;
+      font-size: var(--font-md) !important;
+      margin-bottom: 2px !important;
+    }}
+
+    .calc-section-title {{
+      color: var(--color-text) !important;
+      font-size: var(--font-title) !important;
+      font-weight: 800 !important;
+      letter-spacing: -.02em !important;
+      line-height: 1.25 !important;
+      margin: 0 0 var(--space-3) !important;
+    }}
+
+    .calc-card .calc-section-title + * {{
+      margin-top: 0 !important;
+    }}
+
+    .kpi-grid {{
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(180px, 1fr)) !important;
+      gap: var(--space-3) !important;
+    }}
+
+    .kpi-item {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      padding: 14px 16px !important;
+      min-height: 76px !important;
+    }}
+
+    .kpi-item span {{
+      display: block !important;
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.35 !important;
+      margin-bottom: var(--space-2) !important;
+    }}
+
+    .kpi-item b {{
+      display: block !important;
+      color: var(--color-text) !important;
+      font-size: 17px !important;
+      font-weight: 850 !important;
+      line-height: 1.2 !important;
+      letter-spacing: -.02em !important;
+    }}
+
+    .warning-red {{
+      display: flex !important;
+      align-items: flex-start !important;
+      gap: var(--space-2) !important;
+      margin-top: var(--space-3) !important;
+      background: var(--color-error-soft) !important;
+      border: 1px solid rgba(239, 68, 68, .28) !important;
+      color: #B91C1C !important;
+      padding: 12px 14px !important;
+      border-radius: var(--radius-md) !important;
+      font-size: var(--font-md) !important;
+      font-weight: 750 !important;
+    }}
+
+    .warning-red::before {{
+      content: "!" !important;
+      display: inline-grid !important;
+      place-items: center !important;
+      width: 20px !important;
+      height: 20px !important;
+      border-radius: 999px !important;
+      background: var(--color-error) !important;
+      color: #FFFFFF !important;
+      font-size: 12px !important;
+      font-weight: 900 !important;
+      flex: 0 0 auto !important;
+      margin-top: 1px !important;
+    }}
+
+    .login-shell {{
+      max-width: 1120px !important;
+      margin: 0 auto !important;
+      padding: 8px 0 24px !important;
+    }}
+
+    .login-hero {{
+      position: relative !important;
+      overflow: hidden !important;
+      border: 1px solid rgba(37, 99, 235, .14) !important;
+      border-radius: var(--radius-xl) !important;
+      background:
+        radial-gradient(circle at 88% 18%, rgba(16,185,129,.16), transparent 22rem),
+        linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 58%, #F8FAFC 100%) !important;
+      box-shadow: var(--shadow-md) !important;
+      padding: 34px 38px !important;
+      margin-bottom: var(--space-5) !important;
+    }}
+
+    .login-hero::after {{
+      content: "" !important;
+      position: absolute !important;
+      right: -72px !important;
+      bottom: -108px !important;
+      width: 260px !important;
+      height: 260px !important;
+      border-radius: 999px !important;
+      background: rgba(37, 99, 235, .08) !important;
+      pointer-events: none !important;
+    }}
+
+    .login-eyebrow {{
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: var(--space-2) !important;
+      color: var(--color-primary-dark) !important;
+      background: rgba(37, 99, 235, .10) !important;
+      border: 1px solid rgba(37, 99, 235, .18) !important;
+      border-radius: 999px !important;
+      font-size: 12px !important;
+      font-weight: 850 !important;
+      letter-spacing: .08em !important;
+      padding: 7px 11px !important;
+      text-transform: uppercase !important;
+    }}
+
+    .login-hero h1 {{
+      color: var(--color-text) !important;
+      font-size: 34px !important;
+      line-height: 1.05 !important;
+      letter-spacing: -.04em !important;
+      margin: 18px 0 8px !important;
+      font-weight: 900 !important;
+    }}
+
+    .login-hero h2 {{
+      color: var(--color-primary-dark) !important;
+      font-size: 22px !important;
+      line-height: 1.2 !important;
+      letter-spacing: -.02em !important;
+      margin: 0 0 12px !important;
+      font-weight: 850 !important;
+    }}
+
+    .login-hero p {{
+      color: var(--color-muted) !important;
+      font-size: 15px !important;
+      line-height: 1.6 !important;
+      margin: 0 !important;
+      max-width: 720px !important;
+    }}
+
+    .login-grid {{
+      align-items: stretch !important;
+      gap: var(--space-5) !important;
+    }}
+
+    .login-card,
+    .login-access-card,
+    .login-status-card {{
+      background: var(--color-card) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      color: var(--color-text) !important;
+      padding: 24px !important;
+    }}
+
+    .login-card {{
+      min-height: 100% !important;
+      box-shadow: var(--shadow-md) !important;
+    }}
+
+    .login-card-header {{
+      margin-bottom: var(--space-5) !important;
+    }}
+
+    .login-card-title {{
+      color: var(--color-text) !important;
+      font-size: 22px !important;
+      font-weight: 850 !important;
+      letter-spacing: -.03em !important;
+      line-height: 1.2 !important;
+      margin: 0 0 var(--space-2) !important;
+    }}
+
+    .login-card-subtitle {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-md) !important;
+      line-height: 1.5 !important;
+      margin: 0 !important;
+    }}
+
+    .login-field input,
+    .login-field textarea {{
+      font-size: 15px !important;
+      min-height: 48px !important;
+      padding: 12px 14px !important;
+    }}
+
+    .login-submit button,
+    .login-submit > button {{
+      width: 100% !important;
+      min-height: 48px !important;
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      color: #FFFFFF !important;
+      font-size: 15px !important;
+      font-weight: 850 !important;
+      margin-top: var(--space-2) !important;
+    }}
+
+    .login-submit button:hover,
+    .login-submit > button:hover {{
+      background: var(--color-primary-dark) !important;
+      border-color: var(--color-primary-dark) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .login-error-slot {{
+      min-height: 0 !important;
+      margin-top: var(--space-3) !important;
+    }}
+
+    .login-side-column {{
+      gap: var(--space-4) !important;
+    }}
+
+    .login-access-card {{
+      background: #FFFFFF !important;
+      border-style: dashed !important;
+    }}
+
+    .login-muted-title {{
+      color: var(--color-text) !important;
+      font-size: var(--font-md) !important;
+      font-weight: 850 !important;
+      margin: 0 0 var(--space-2) !important;
+    }}
+
+    .login-muted-text {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.5 !important;
+      margin: 0 0 var(--space-3) !important;
+    }}
+
+    .login-access-list {{
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: var(--space-2) !important;
+      margin-top: var(--space-3) !important;
+    }}
+
+    .login-access-item {{
+      background: var(--color-surface) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-sm) !important;
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      padding: 9px 10px !important;
+    }}
+
+    .login-access-item b {{
+      color: var(--color-text) !important;
+      font-weight: 850 !important;
+    }}
+
+    .login-status-card {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37, 99, 235, .22) !important;
+    }}
+
+    .login-status-label {{
+      color: var(--color-primary-dark) !important;
+      font-size: var(--font-sm) !important;
+      font-weight: 850 !important;
+      letter-spacing: .04em !important;
+      margin: 0 0 var(--space-2) !important;
+      text-transform: uppercase !important;
+    }}
+
+    .login-status-body {{
+      color: var(--color-text) !important;
+      font-size: var(--font-md) !important;
+      line-height: 1.5 !important;
+    }}
+
+    .login-status-body .warning-red {{
+      margin-top: 0 !important;
+      background: var(--color-warning-soft) !important;
+      border-color: rgba(245, 158, 11, .36) !important;
+      color: #92400E !important;
+    }}
+
+    .login-status-body .warning-red::before {{
+      background: var(--color-warning) !important;
+    }}
+
+    .dashboard-shell {{
+      max-width: 1480px !important;
+      margin: 0 auto !important;
+    }}
+
+    .dashboard-topbar {{
+      align-items: center !important;
+      background: rgba(255, 255, 255, .86) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      gap: var(--space-4) !important;
+      margin-bottom: var(--space-5) !important;
+      padding: 16px 18px !important;
+      position: sticky !important;
+      top: 12px !important;
+      z-index: 20 !important;
+      backdrop-filter: blur(12px) !important;
+    }}
+
+    .dashboard-brand {{
+      align-items: center !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+    }}
+
+    .dashboard-logo {{
+      align-items: center !important;
+      background: linear-gradient(135deg, var(--color-text), var(--color-primary)) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 10px 22px rgba(37, 99, 235, .20) !important;
+      color: #FFFFFF !important;
+      display: flex !important;
+      flex: 0 0 44px !important;
+      font-size: 19px !important;
+      font-weight: 900 !important;
+      height: 44px !important;
+      justify-content: center !important;
+      width: 44px !important;
+    }}
+
+    .dashboard-title {{
+      color: var(--color-text) !important;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.03em !important;
+      line-height: 1.1 !important;
+    }}
+
+    .dashboard-subtitle {{
+      color: var(--color-muted) !important;
+      font-size: 12px !important;
+      line-height: 1.35 !important;
+      margin-top: 3px !important;
+    }}
+
+    .dashboard-system-status {{
+      align-items: center !important;
+      background: var(--color-primary-soft) !important;
+      border: 1px solid rgba(37, 99, 235, .18) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-text) !important;
+      display: flex !important;
+      gap: var(--space-2) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-2) !important;
+      padding: 8px 10px !important;
+    }}
+
+    .dashboard-system-status span {{
+      color: var(--color-primary-dark) !important;
+      font-size: 11px !important;
+      font-weight: 850 !important;
+      letter-spacing: .04em !important;
+      text-transform: uppercase !important;
+      white-space: nowrap !important;
+    }}
+
+    .dashboard-system-status b {{
+      color: var(--color-text) !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+      line-height: 1.35 !important;
+      text-align: right !important;
+    }}
+
+    .dashboard-system-status .warning-red {{
+      margin: 0 !important;
+      padding: 6px 8px !important;
+      font-size: 12px !important;
+    }}
+
+    .top-badge {{
+      align-items: center !important;
+      background: #FFFFFF !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+      justify-content: flex-end !important;
+      margin: 0 !important;
+      padding: 9px 10px !important;
+      width: 100% !important;
+    }}
+
+    .top-badge .user-avatar {{
+      align-items: center !important;
+      background: var(--color-green-soft) !important;
+      border: 1px solid rgba(16,185,129,.22) !important;
+      border-radius: 999px !important;
+      color: #047857 !important;
+      display: inline-flex !important;
+      flex: 0 0 34px !important;
+      font-weight: 900 !important;
+      height: 34px !important;
+      justify-content: center !important;
+      width: 34px !important;
+    }}
+
+    .top-badge small {{
+      color: var(--color-muted) !important;
+      display: block !important;
+      font-size: 12px !important;
+      line-height: 1.2 !important;
+    }}
+
+    .actions-layout {{
+      align-items: flex-start !important;
+      gap: var(--space-5) !important;
+    }}
+
+    .actions-sidebar {{
+      background: var(--color-card) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      padding: 16px !important;
+      position: sticky !important;
+      top: 118px !important;
+      max-height: calc(100vh - 138px) !important;
+      overflow: auto !important;
+    }}
+
+    .sidebar-head {{
+      align-items: flex-start !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-3) !important;
+    }}
+
+    .sidebar-title {{
+      color: var(--color-text) !important;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.03em !important;
+      line-height: 1.15 !important;
+    }}
+
+    .sidebar-head p {{
+      color: var(--color-muted) !important;
+      font-size: 12px !important;
+      line-height: 1.45 !important;
+      margin: 5px 0 0 !important;
+    }}
+
+    .sidebar-actions-title {{
+      color: var(--color-muted) !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .06em !important;
+      margin: var(--space-4) 0 var(--space-2) !important;
+      text-transform: uppercase !important;
+    }}
+
+    .add-action-row,
+    .secondary-action-row {{
+      gap: var(--space-2) !important;
+    }}
+
+    .add-action-button button {{
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      color: #FFFFFF !important;
+      flex: 1 1 auto !important;
+      font-size: 12px !important;
+      min-height: 38px !important;
+      padding: 8px 10px !important;
+      width: 100% !important;
+    }}
+
+    .add-action-button button:hover {{
+      background: var(--color-primary-dark) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .secondary-button button {{
+      background: #FFFFFF !important;
+      border-color: var(--color-border) !important;
+      color: var(--color-muted) !important;
+      font-size: 12px !important;
+      min-height: 36px !important;
+      padding: 8px 10px !important;
+    }}
+
+    .secondary-button button:hover {{
+      background: var(--color-surface) !important;
+      color: var(--color-text) !important;
+    }}
+
+    .danger-button button {{
+      background: var(--color-error-soft) !important;
+      border-color: rgba(239, 68, 68, .28) !important;
+      color: #B91C1C !important;
+      font-size: 12px !important;
+      min-height: 36px !important;
+      padding: 8px 10px !important;
+    }}
+
+    .danger-button button:hover {{
+      background: var(--color-error) !important;
+      border-color: var(--color-error) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .status-field textarea,
+    .status-field input {{
+      background: var(--color-surface) !important;
+      color: var(--color-muted) !important;
+      font-size: 12px !important;
+      min-height: 38px !important;
+    }}
+
+    .action-workspace {{
+      min-width: 0 !important;
+    }}
+
+    .director-card {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+      border: 1px solid rgba(37, 99, 235, .20) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      margin-bottom: var(--space-4) !important;
+      padding: 16px !important;
+      position: sticky !important;
+      top: 118px !important;
+      z-index: 12 !important;
+    }}
+
+    .director-card-head {{
+      align-items: flex-start !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-3) !important;
+    }}
+
+    .director-title {{
+      color: var(--color-text) !important;
+      font-size: 16px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.02em !important;
+      line-height: 1.2 !important;
+    }}
+
+    .director-card-head p {{
+      color: var(--color-muted) !important;
+      font-size: 12px !important;
+      line-height: 1.45 !important;
+      margin: 4px 0 0 !important;
+    }}
+
+    .director-badge {{
+      background: var(--color-green-soft) !important;
+      border: 1px solid rgba(16,185,129,.24) !important;
+      border-radius: 999px !important;
+      color: #047857 !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .04em !important;
+      padding: 5px 9px !important;
+      text-transform: uppercase !important;
+      white-space: nowrap !important;
+    }}
+
+    .director-fields {{
+      align-items: end !important;
+      gap: var(--space-3) !important;
+    }}
+
+    .action-detail-card {{
+      background: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }}
+
+    .demo-card-header {{
+      align-items: flex-start !important;
+      background:
+        radial-gradient(circle at 92% 18%, rgba(16,185,129,.12), transparent 18rem),
+        linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 100%) !important;
+      border: 1px solid rgba(37, 99, 235, .18) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      display: flex !important;
+      gap: var(--space-5) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-4) !important;
+      padding: 22px 24px !important;
+    }}
+
+    .demo-type-pill {{
+      background: var(--color-green-soft) !important;
+      border: 1px solid rgba(16,185,129,.24) !important;
+      border-radius: 999px !important;
+      color: #047857 !important;
+      display: inline-flex !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .06em !important;
+      margin-bottom: var(--space-3) !important;
+      padding: 6px 10px !important;
+      text-transform: uppercase !important;
+    }}
+
+    .demo-card-header h2 {{
+      color: var(--color-text) !important;
+      font-size: 24px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.04em !important;
+      line-height: 1.1 !important;
+      margin: 0 0 var(--space-2) !important;
+    }}
+
+    .demo-card-header p {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-md) !important;
+      line-height: 1.55 !important;
+      margin: 0 !important;
+      max-width: 760px !important;
+    }}
+
+    .demo-header-note {{
+      background: rgba(255,255,255,.78) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-muted) !important;
+      flex: 0 0 220px !important;
+      font-size: var(--font-sm) !important;
+      font-weight: 700 !important;
+      line-height: 1.4 !important;
+      padding: 12px 14px !important;
+    }}
+
+    .demo-section {{
+      background: var(--color-card) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      margin-bottom: var(--space-4) !important;
+      padding: 18px !important;
+    }}
+
+    .demo-section-head {{
+      align-items: flex-start !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-4) !important;
+    }}
+
+    .demo-section-title {{
+      color: var(--color-text) !important;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.03em !important;
+      line-height: 1.2 !important;
+    }}
+
+    .demo-section-head p {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.5 !important;
+      margin: 5px 0 0 !important;
+      max-width: 760px !important;
+    }}
+
+    .demo-section-badge {{
+      background: var(--color-warning-soft) !important;
+      border: 1px solid rgba(245,158,11,.32) !important;
+      border-radius: 999px !important;
+      color: #92400E !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .04em !important;
+      padding: 6px 10px !important;
+      text-transform: uppercase !important;
+      white-space: nowrap !important;
+    }}
+
+    .demo-key-fields,
+    .demo-meta-fields {{
+      gap: var(--space-3) !important;
+    }}
+
+    .demo-key-field input,
+    .demo-key-field select,
+    .demo-key-field textarea {{
+      border-color: rgba(37,99,235,.22) !important;
+      min-height: 46px !important;
+    }}
+
+    .demo-key-field label,
+    .demo-key-field .label-wrap span {{
+      color: var(--color-primary-dark) !important;
+      font-weight: 850 !important;
+    }}
+
+    .demo-calculator-section {{
+      padding: 0 !important;
+      overflow: hidden !important;
+    }}
+
+    .demo-calculator-section > .form,
+    .demo-calculator-section .demo-section-head {{
+      padding: 18px 18px 0 !important;
+    }}
+
+    .demo-calculator-section .irbis-demo-calc-widget {{
+      margin: 0 !important;
+    }}
+
+    .demo-calculator-section [data-testid="dataframe"] {{
+      margin: 0 18px 18px !important;
+    }}
+
+    .demo-kpi-section .calc-card {{
+      border: 0 !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }}
+
+    .demo-kpi-section .calc-section-title {{
+      display: none !important;
+    }}
+
+    .demo-kpi-output .kpi-grid {{
+      grid-template-columns: repeat(3, minmax(160px, 1fr)) !important;
+    }}
+
+    .demo-kpi-output .kpi-item {{
+      background: #FFFFFF !important;
+      border-color: rgba(37,99,235,.16) !important;
+      min-height: 82px !important;
+    }}
+
+    .demo-criteria-section {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+    }}
+
+    .demo-criteria-section .criteria-accordion {{
+      border-radius: var(--radius-md) !important;
+      box-shadow: none !important;
+    }}
+
+    .demo-criteria-section .criteria-grid-row {{
+      background: #FFFFFF !important;
+      box-shadow: none !important;
+    }}
+
+    .demo-action-panel {{
+      background: rgba(255,255,255,.92) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      margin-top: var(--space-4) !important;
+      padding: 16px !important;
+      position: sticky !important;
+      bottom: 12px !important;
+      z-index: 10 !important;
+      backdrop-filter: blur(12px) !important;
+    }}
+
+    .demo-action-row {{
+      justify-content: flex-end !important;
+      gap: var(--space-3) !important;
+    }}
+
+    .demo-save-button button {{
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      color: #FFFFFF !important;
+      min-height: 42px !important;
+      padding-left: 18px !important;
+      padding-right: 18px !important;
+    }}
+
+    .demo-save-button button:hover {{
+      background: var(--color-primary-dark) !important;
+      border-color: var(--color-primary-dark) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .demo-status-field textarea,
+    .demo-status-field input {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37,99,235,.18) !important;
+      color: var(--color-text) !important;
+      margin-top: var(--space-3) !important;
+    }}
+
+    .sale-card-header,
+    .premium-card-header {{
+      align-items: flex-start !important;
+      border: 1px solid rgba(37, 99, 235, .18) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      display: flex !important;
+      gap: var(--space-5) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-4) !important;
+      padding: 22px 24px !important;
+    }}
+
+    .sale-card-header {{
+      background:
+        radial-gradient(circle at 92% 18%, rgba(37,99,235,.13), transparent 18rem),
+        linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 100%) !important;
+    }}
+
+    .premium-card-header {{
+      background:
+        radial-gradient(circle at 92% 18%, rgba(16,185,129,.16), transparent 18rem),
+        linear-gradient(135deg, #FFFFFF 0%, #ECFDF5 100%) !important;
+      border-color: rgba(16,185,129,.22) !important;
+    }}
+
+    .sale-type-pill,
+    .premium-type-pill {{
+      border-radius: 999px !important;
+      display: inline-flex !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .06em !important;
+      margin-bottom: var(--space-3) !important;
+      padding: 6px 10px !important;
+      text-transform: uppercase !important;
+    }}
+
+    .sale-type-pill {{
+      background: var(--color-primary-soft) !important;
+      border: 1px solid rgba(37,99,235,.22) !important;
+      color: var(--color-primary-dark) !important;
+    }}
+
+    .premium-type-pill {{
+      background: var(--color-green-soft) !important;
+      border: 1px solid rgba(16,185,129,.24) !important;
+      color: #047857 !important;
+    }}
+
+    .sale-card-header h2,
+    .premium-card-header h2 {{
+      color: var(--color-text) !important;
+      font-size: 24px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.04em !important;
+      line-height: 1.1 !important;
+      margin: 0 0 var(--space-2) !important;
+    }}
+
+    .sale-card-header p,
+    .premium-card-header p {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-md) !important;
+      line-height: 1.55 !important;
+      margin: 0 !important;
+      max-width: 760px !important;
+    }}
+
+    .sale-header-note,
+    .premium-header-note {{
+      background: rgba(255,255,255,.78) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-muted) !important;
+      flex: 0 0 240px !important;
+      font-size: var(--font-sm) !important;
+      font-weight: 700 !important;
+      line-height: 1.4 !important;
+      padding: 12px 14px !important;
+    }}
+
+    .sale-search-row {{
+      align-items: end !important;
+      gap: var(--space-3) !important;
+    }}
+
+    .sale-search-field input,
+    .sale-select-field input,
+    .sale-select-field select {{
+      min-height: 46px !important;
+    }}
+
+    .sale-product-section [data-testid="dataframe"],
+    .premium-tables-section [data-testid="dataframe"] {{
+      margin-top: var(--space-3) !important;
+    }}
+
+    .sale-kpi-section .calc-card,
+    .premium-kpi-section .calc-card {{
+      border: 0 !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }}
+
+    .sale-kpi-section .calc-section-title,
+    .premium-kpi-section .calc-section-title {{
+      display: none !important;
+    }}
+
+    .premium-close-badge {{
+      background: var(--color-green-soft) !important;
+      border: 1px solid rgba(16,185,129,.24) !important;
+      border-radius: 999px !important;
+      color: #047857 !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .04em !important;
+      padding: 6px 10px !important;
+      text-transform: uppercase !important;
+      white-space: nowrap !important;
+    }}
+
+    .premium-kpi-output .kpi-item {{
+      border-color: rgba(16,185,129,.22) !important;
+      background: linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%) !important;
+    }}
+
+    .premium-tables-section {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+    }}
+
+    .premium-action-panel {{
+      border-color: rgba(16,185,129,.22) !important;
+    }}
+
+    .premium-save-button button {{
+      background: var(--color-green) !important;
+      border-color: var(--color-green) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .premium-save-button button:hover {{
+      background: #059669 !important;
+      border-color: #059669 !important;
+      color: #FFFFFF !important;
+    }}
+
+    .admin-page-header {{
+      align-items: flex-start !important;
+      background:
+        radial-gradient(circle at 92% 18%, rgba(37,99,235,.12), transparent 18rem),
+        linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 100%) !important;
+      border: 1px solid rgba(37,99,235,.18) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      display: flex !important;
+      gap: var(--space-5) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-4) !important;
+      padding: 24px !important;
+    }}
+
+    .settings-header {{
+      background:
+        radial-gradient(circle at 92% 18%, rgba(16,185,129,.14), transparent 18rem),
+        linear-gradient(135deg, #FFFFFF 0%, #F0FDF4 100%) !important;
+      border-color: rgba(16,185,129,.22) !important;
+    }}
+
+    .admin-page-eyebrow {{
+      background: var(--color-primary-soft) !important;
+      border: 1px solid rgba(37,99,235,.20) !important;
+      border-radius: 999px !important;
+      color: var(--color-primary-dark) !important;
+      display: inline-flex !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .06em !important;
+      margin-bottom: var(--space-3) !important;
+      padding: 6px 10px !important;
+      text-transform: uppercase !important;
+    }}
+
+    .admin-page-header h2 {{
+      color: var(--color-text) !important;
+      font-size: 24px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.04em !important;
+      line-height: 1.1 !important;
+      margin: 0 0 var(--space-2) !important;
+    }}
+
+    .admin-page-header p {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-md) !important;
+      line-height: 1.55 !important;
+      margin: 0 !important;
+      max-width: 820px !important;
+    }}
+
+    .admin-page-note {{
+      background: rgba(255,255,255,.78) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-muted) !important;
+      flex: 0 0 240px !important;
+      font-size: var(--font-sm) !important;
+      font-weight: 750 !important;
+      line-height: 1.4 !important;
+      padding: 12px 14px !important;
+    }}
+
+    .admin-section {{
+      background: var(--color-card) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl) !important;
+      box-shadow: var(--shadow-sm) !important;
+      margin-bottom: var(--space-4) !important;
+      padding: 18px !important;
+    }}
+
+    .admin-section-head {{
+      align-items: flex-start !important;
+      display: flex !important;
+      gap: var(--space-3) !important;
+      justify-content: space-between !important;
+      margin-bottom: var(--space-4) !important;
+    }}
+
+    .admin-section-title {{
+      color: var(--color-text) !important;
+      font-size: 18px !important;
+      font-weight: 900 !important;
+      letter-spacing: -.03em !important;
+      line-height: 1.2 !important;
+    }}
+
+    .admin-section-head p {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.5 !important;
+      margin: 5px 0 0 !important;
+      max-width: 840px !important;
+    }}
+
+    .products-toolbar {{
+      align-items: end !important;
+      gap: var(--space-3) !important;
+    }}
+
+    .toolbar-file {{
+      min-width: 0 !important;
+    }}
+
+    .products-table-section,
+    .criteria-settings-section,
+    .expense-settings-section,
+    .ui-settings-section,
+    .premium-tables-section {{
+      overflow: hidden !important;
+    }}
+
+    .products-table-section [data-testid="dataframe"],
+    .criteria-settings-section [data-testid="dataframe"],
+    .expense-settings-section [data-testid="dataframe"],
+    .ui-settings-section [data-testid="dataframe"],
+    .premium-tables-section [data-testid="dataframe"] {{
+      overflow-x: auto !important;
+    }}
+
+    .products-table-section table,
+    .criteria-settings-section table,
+    .expense-settings-section table,
+    .ui-settings-section table {{
+      font-size: 12px !important;
+    }}
+
+    .admin-status-field textarea,
+    .admin-status-field input {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37,99,235,.18) !important;
+      color: var(--color-text) !important;
+      margin-top: var(--space-3) !important;
+    }}
+
+    .finance-settings-section,
+    .settings-save-section {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+    }}
+
+    .settings-grid {{
+      gap: var(--space-3) !important;
+    }}
+
+    .gradio-container input:disabled,
+    .gradio-container textarea:disabled,
+    .gradio-container select:disabled,
+    .gradio-container [aria-disabled="true"] input,
+    .gradio-container [aria-disabled="true"] textarea,
+    .gradio-container [aria-disabled="true"] select {{
+      background: #F8FAFC !important;
+      border-color: var(--color-border) !important;
+      color: var(--color-text) !important;
+      opacity: 1 !important;
+    }}
+
+    .gradio-container button:disabled,
+    .gradio-container [aria-disabled="true"] button {{
+      background: #F8FAFC !important;
+      color: #94A3B8 !important;
+      opacity: .85 !important;
+      transform: none !important;
+    }}
+
+    .maintenance-section {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+    }}
+
+    .maintenance-badge {{
+      background: var(--color-warning-soft) !important;
+      border: 1px solid rgba(245,158,11,.32) !important;
+      border-radius: 999px !important;
+      color: #92400E !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      letter-spacing: .04em !important;
+      padding: 6px 10px !important;
+      text-transform: uppercase !important;
+      white-space: nowrap !important;
+    }}
+
+    .maintenance-actions {{
+      align-items: stretch !important;
+      gap: var(--space-4) !important;
+    }}
+
+    .maintenance-card {{
+      background: #FFFFFF !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-sm) !important;
+      padding: 16px !important;
+    }}
+
+    .import-card {{
+      border-color: rgba(245,158,11,.30) !important;
+      background: #FFFBEB !important;
+    }}
+
+    .maintenance-card-title {{
+      color: var(--color-text) !important;
+      font-size: var(--font-md) !important;
+      font-weight: 900 !important;
+      letter-spacing: -.01em !important;
+      margin-bottom: var(--space-1) !important;
+    }}
+
+    .maintenance-card p {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.45 !important;
+      margin: 0 0 var(--space-3) !important;
+    }}
+
+    .gradio-container button:focus-visible,
+    .gradio-container input:focus-visible,
+    .gradio-container textarea:focus-visible,
+    .gradio-container select:focus-visible,
+    .gradio-container [role="button"]:focus-visible,
+    .gradio-container [role="tab"]:focus-visible,
+    .gradio-container [role="radio"]:focus-visible {{
+      outline: none !important;
+      box-shadow: var(--shadow-focus) !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"],
+    .table-wrap {{
+      max-width: 100% !important;
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+    }}
+
+    .gradio-container footer,
+    .gradio-container .footer {{
+      background: transparent !important;
+      border: 0 !important;
+      color: var(--color-muted) !important;
+      margin-top: var(--space-6) !important;
+      padding: var(--space-4) 0 0 !important;
+      position: static !important;
+      z-index: 0 !important;
+    }}
+
+    .gradio-container footer a,
+    .gradio-container .footer a {{
+      color: var(--color-muted) !important;
+    }}
+
+    @media (max-width: 1280px) {{
+      .gradio-container {{
+        padding: 18px !important;
+      }}
+
+      .actions-layout {{
+        gap: var(--space-4) !important;
+      }}
+
+      .actions-sidebar {{
+        flex-basis: 360px !important;
+      }}
+
+      .dashboard-topbar {{
+        top: 8px !important;
+      }}
+
+      .director-card,
+      .actions-sidebar {{
+        top: 104px !important;
+      }}
+
+      .demo-kpi-output .kpi-grid,
+      .kpi-grid {{
+        grid-template-columns: repeat(2, minmax(180px, 1fr)) !important;
+      }}
+    }}
+
+    button,
+    .gradio-container button {{
+      border-radius: var(--radius-md) !important;
+      border: 1px solid var(--color-border) !important;
+      background: #FFFFFF !important;
+      color: var(--color-text) !important;
+      box-shadow: var(--shadow-sm) !important;
+      font-size: var(--font-md) !important;
+      font-weight: 750 !important;
+      min-height: 40px !important;
+      padding: 9px 14px !important;
+      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast) !important;
+    }}
+
+    button:hover,
+    .gradio-container button:hover {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37, 99, 235, .34) !important;
+      color: var(--color-primary-dark) !important;
+      transform: translateY(-1px) !important;
+    }}
+
+    button:focus-visible,
+    .gradio-container button:focus-visible {{
+      outline: none !important;
+      box-shadow: var(--shadow-focus) !important;
+    }}
+
+    .gradio-container button.primary,
+    .gradio-container button[variant="primary"],
+    .gradio-container .primary > button {{
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .gradio-container button.primary:hover,
+    .gradio-container button[variant="primary"]:hover,
+    .gradio-container .primary > button:hover {{
+      background: var(--color-primary-dark) !important;
+      border-color: var(--color-primary-dark) !important;
+      color: #FFFFFF !important;
+    }}
+
+    .gradio-container input,
+    .gradio-container textarea,
+    .gradio-container select,
+    .gradio-container [role="textbox"],
+    .gradio-container .wrap input,
+    .gradio-container .wrap textarea {{
+      background: #FFFFFF !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      color: var(--color-text) !important;
+      font-size: var(--font-md) !important;
+      min-height: 42px !important;
+      padding: 10px 12px !important;
+      box-shadow: none !important;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast) !important;
+    }}
+
+    .gradio-container textarea {{
+      line-height: 1.45 !important;
+    }}
+
+    .gradio-container input:hover,
+    .gradio-container textarea:hover,
+    .gradio-container select:hover {{
+      border-color: var(--color-border-strong) !important;
+    }}
+
+    .gradio-container input:focus,
+    .gradio-container textarea:focus,
+    .gradio-container select:focus,
+    .gradio-container [role="textbox"]:focus {{
+      border-color: var(--color-primary) !important;
+      box-shadow: var(--shadow-focus) !important;
+      outline: none !important;
+    }}
+
+    .gradio-container input::placeholder,
+    .gradio-container textarea::placeholder {{
+      color: #94A3B8 !important;
+    }}
+
+    .gradio-container label,
+    .gradio-container .label-wrap,
+    .gradio-container .label-wrap span {{
+      color: var(--color-muted) !important;
+      font-size: var(--font-sm) !important;
+      font-weight: 650 !important;
+    }}
+
+    .gradio-container [data-testid="tabs"] {{
+      gap: var(--space-4) !important;
+    }}
+
+    .gradio-container .tabs,
+    .gradio-container [role="tablist"] {{
+      background: #FFFFFF !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-sm) !important;
+      gap: var(--space-2) !important;
+      padding: var(--space-2) !important;
+      margin-bottom: var(--space-4) !important;
+    }}
+
+    .gradio-container [role="tab"],
+    .gradio-container button[role="tab"] {{
+      background: transparent !important;
+      border: 1px solid transparent !important;
+      border-radius: var(--radius-md) !important;
+      box-shadow: none !important;
+      color: var(--color-muted) !important;
+      font-weight: 800 !important;
+      min-height: 38px !important;
+      padding: 9px 14px !important;
+    }}
+
+    .gradio-container [role="tab"]:hover {{
+      background: var(--color-surface) !important;
+      color: var(--color-text) !important;
+      transform: none !important;
+    }}
+
+    .gradio-container [role="tab"][aria-selected="true"],
+    .gradio-container button[role="tab"][aria-selected="true"] {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37, 99, 235, .24) !important;
+      color: var(--color-primary-dark) !important;
+    }}
+
+    .gradio-container input[type="checkbox"],
+    .gradio-container input[type="radio"] {{
+      accent-color: var(--color-primary) !important;
+      min-height: auto !important;
+      width: 16px !important;
+      height: 16px !important;
+      padding: 0 !important;
+      border-radius: 4px !important;
+    }}
+
+    .gradio-container table {{
+      width: 100% !important;
+      border-collapse: separate !important;
+      border-spacing: 0 !important;
+      background: #FFFFFF !important;
+      color: var(--color-text) !important;
+      font-size: var(--font-sm) !important;
+    }}
+
+    .gradio-container table th,
+    .gradio-container table td {{
+      border-color: var(--color-border) !important;
+      color: var(--color-text) !important;
+      font-family: {font}, sans-serif !important;
+      line-height: 1.35 !important;
+      padding: 9px 10px !important;
+      vertical-align: middle !important;
+    }}
+
+    .gradio-container table th {{
+      background: #F8FAFC !important;
+      color: var(--color-muted) !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+      letter-spacing: .04em !important;
+      text-transform: uppercase !important;
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 2 !important;
+    }}
+
+    .gradio-container table tr:hover td {{
+      background: #F8FAFC !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] {{
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-sm) !important;
+      overflow: hidden !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] textarea,
+    .gradio-container [data-testid="dataframe"] input {{
+      background: transparent !important;
+      border-radius: var(--radius-sm) !important;
+      color: var(--color-text) !important;
+      font-family: {font}, sans-serif !important;
+      font-size: var(--font-sm) !important;
+      min-height: var(--table-row-height) !important;
+      padding: 6px 8px !important;
+    }}
+
+    .gradio-container [data-testid="dataframe"] textarea:focus,
+    .gradio-container [data-testid="dataframe"] input:focus {{
+      background: #FFFFFF !important;
+      box-shadow: var(--shadow-focus) !important;
+    }}
+
+    .action-list {{
+      background: var(--color-card) !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }}
+
+    .action-list label {{
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-md) !important;
+      background: #FFFFFF !important;
+      color: var(--color-text) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.35 !important;
+      margin-bottom: var(--space-2) !important;
+      min-height: 76px !important;
+      padding: 12px 12px 12px 14px !important;
+      transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+    }}
+
+    .action-list label:hover {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37, 99, 235, .28) !important;
+    }}
+
+    .action-list label:has(input:checked) {{
+      background: var(--color-primary-soft) !important;
+      border-color: var(--color-primary) !important;
+      box-shadow: inset 3px 0 0 var(--color-primary) !important;
+    }}
+
+    .action-list textarea {{
+      background: transparent !important;
+      border: 0 !important;
+      color: var(--color-text) !important;
+      font-size: var(--font-sm) !important;
+      line-height: 1.35 !important;
+      padding: 0 !important;
+      min-height: auto !important;
+      box-shadow: none !important;
+    }}
+
+    .criteria-block-compact {{
+      margin-top: var(--space-3) !important;
+    }}
+
+    .criteria-accordion {{
+      background: #FFFFFF !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-lg) !important;
+      box-shadow: var(--shadow-sm) !important;
+      overflow: hidden !important;
+    }}
+
+    .criteria-accordion details > summary {{
+      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+      border-bottom: 1px solid var(--color-border) !important;
+      color: var(--color-text) !important;
+      font-weight: 900 !important;
+      letter-spacing: -.02em !important;
+      padding: 13px 16px !important;
+    }}
+
+    .criteria-accordion details[open] > summary {{
+      color: var(--color-primary-dark) !important;
+    }}
+
+    .criteria-accordion,
+    .criteria-accordion * {{
+      color: var(--color-text) !important;
+    }}
+
     .criteria-grid-row {{
       display:grid !important;
       grid-template-columns:
-        minmax(0, {ui.get('criteria_name_width_pct',20)}fr)
-        minmax(0, {ui.get('criteria_levels_width_pct',60)}fr)
-        minmax(0, {ui.get('criteria_comment_width_pct',20)}fr) !important;
-      gap:var(--criteria-row-gap) !important;
+        minmax(190px, {ui.get('criteria_name_width_pct',20)}fr)
+        minmax(360px, {ui.get('criteria_levels_width_pct',60)}fr)
+        minmax(180px, {ui.get('criteria_comment_width_pct',20)}fr) !important;
+      gap:max(var(--criteria-row-gap), 12px) !important;
       align-items:stretch !important;
-      border:1px solid #d7e0ec !important;
-      border-radius:12px !important;
-      background:#ffffff !important;
-      padding:8px !important;
-      margin-bottom:8px !important;
+      border:1px solid var(--color-border) !important;
+      border-radius:var(--radius-lg) !important;
+      background:#FFFFFF !important;
+      padding:12px !important;
+      margin-bottom:10px !important;
       width:100% !important;
       box-sizing:border-box !important;
+      box-shadow: 0 1px 2px rgba(15,23,42,.03) !important;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast) !important;
     }}
+
+    .criteria-grid-row:hover {{
+      background:#FCFDFF !important;
+      border-color: rgba(37,99,235,.24) !important;
+      box-shadow: 0 8px 18px rgba(15,23,42,.05) !important;
+    }}
+
     .criteria-name-cell {{
       min-width:0 !important;
-      background:#f8fbff !important;
-      border:1px solid #e2e8f0 !important;
-      border-radius:10px !important;
-      padding:8px 10px !important;
-      min-height:56px !important;
+      background:#F8FAFC !important;
+      border:1px solid #EEF2F7 !important;
+      border-radius:var(--radius-md) !important;
+      padding:11px 12px !important;
+      min-height:74px !important;
     }}
-    .criteria-name-cell, .criteria-name-cell * {{ color:#111111 !important; }}
-    .criteria-name-cell p {{ margin:0 !important; line-height:1.2 !important; font-size:12px !important; }}
-    .criteria-name-cell strong {{ display:block !important; margin-bottom:3px !important; font-size:13px !important; color:#111111 !important; }}
+
+    .criteria-name-cell,
+    .criteria-name-cell * {{
+      color:var(--color-text) !important;
+    }}
+
+    .criteria-name-cell p {{
+      margin:0 !important;
+      line-height:1.38 !important;
+      font-size:var(--font-sm) !important;
+      color:var(--color-muted) !important;
+    }}
+
+    .criteria-name-cell strong {{
+      display:block !important;
+      margin-bottom:5px !important;
+      font-size:var(--font-md) !important;
+      color:var(--color-text) !important;
+      letter-spacing:-.01em !important;
+    }}
+
     .criteria-name-cell, .criteria-levels-cell, .criteria-comment-cell {{ min-width:0 !important; box-sizing:border-box !important; }}
     .criteria-levels-cell {{ padding:0 !important; min-width:0 !important; width:100% !important; }}
     .criteria-comment-cell {{ min-width:0 !important; width:100% !important; }}
-    .criteria-comment-cell textarea {{ min-height:56px !important; font-size:12px !important; color:#111111 !important; width:100% !important; }}
+
+    .criteria-comment-cell textarea {{
+      min-height:74px !important;
+      font-size:var(--font-sm) !important;
+      color:var(--color-text) !important;
+      width:100% !important;
+      resize:vertical !important;
+    }}
+
     .criteria-radio {{ margin:0 !important; }}
+
     .criteria-radio fieldset,
     .criteria-radio div[role="radiogroup"] {{
       display:flex !important;
       flex-direction:row !important;
       flex-wrap:nowrap !important;
-      gap:6px !important;
+      gap:8px !important;
       align-items:stretch !important;
       width:100% !important;
+      height:100% !important;
     }}
+
     .criteria-radio label {{
       flex:1 1 0 !important;
-      border:1px solid #94a3b8 !important;
-      border-radius:10px !important;
-      padding:7px 8px !important;
+      border:1px solid var(--color-border) !important;
+      border-radius:var(--radius-md) !important;
+      padding:9px 10px !important;
       margin:0 !important;
-      background:#f8fafc !important;
-      min-height:56px !important;
+      background:#FFFFFF !important;
+      min-height:74px !important;
       display:flex !important;
       align-items:center !important;
       justify-content:center !important;
       text-align:center !important;
       white-space:pre-line !important;
-      color:#111111 !important;
+      color:var(--color-text) !important;
       font-size:11.5px !important;
-      line-height:1.14 !important;
+      line-height:1.24 !important;
       cursor:pointer !important;
+      box-shadow: 0 1px 2px rgba(15,23,42,.03) !important;
+      transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast), transform var(--transition-fast) !important;
     }}
+
+    .criteria-radio label:hover {{
+      background: var(--color-primary-soft) !important;
+      border-color: rgba(37, 99, 235, .32) !important;
+      color: var(--color-primary-dark) !important;
+      transform: translateY(-1px) !important;
+    }}
+
     .criteria-radio label input {{ display:none !important; }}
-    .criteria-radio label:has(input:checked) {{ border:3px solid #111111 !important; background:#e0f2fe !important; font-weight:800 !important; }}
-    .criteria-radio label span {{ color:#111111 !important; }}
-    .criteria-accordion, .criteria-accordion * {{ color:#111111 !important; }}
-    button {{ border-radius:12px !important; font-weight:700 !important; }}
+
+    .criteria-radio label:has(input:checked) {{
+      border:2px solid var(--color-primary) !important;
+      background:var(--color-primary-soft) !important;
+      box-shadow:0 0 0 3px rgba(37,99,235,.10) !important;
+      color:var(--color-primary-dark) !important;
+      font-weight:850 !important;
+    }}
+
+    .criteria-radio label span {{
+      color:var(--color-text) !important;
+      font-weight:inherit !important;
+      line-height:1.24 !important;
+    }}
+
+    .criteria-radio label:hover span,
+    .criteria-radio label:has(input:checked) span {{
+      color:var(--color-primary-dark) !important;
+    }}
+
+    @media (max-width: 1024px) {{
+      .gradio-container {{
+        padding: var(--space-4) !important;
+      }}
+
+      .login-shell {{
+        max-width: 920px !important;
+      }}
+
+      .login-hero {{
+        padding: 28px !important;
+      }}
+
+      .login-hero h1 {{
+        font-size: 30px !important;
+      }}
+
+      .login-access-list {{
+        grid-template-columns: 1fr !important;
+      }}
+
+      .dashboard-topbar,
+      .actions-sidebar,
+      .director-card {{
+        position: static !important;
+      }}
+
+      .actions-layout,
+      .dashboard-topbar,
+      .login-grid,
+      .maintenance-actions {{
+        flex-direction: column !important;
+      }}
+
+      .actions-layout > *,
+      .dashboard-topbar > *,
+      .login-grid > *,
+      .actions-sidebar,
+      .action-workspace {{
+        flex: 1 1 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        width: 100% !important;
+      }}
+
+      .actions-sidebar {{
+        max-height: none !important;
+        overflow: visible !important;
+      }}
+
+      .dashboard-system-status {{
+        align-items: flex-start !important;
+        flex-direction: column !important;
+      }}
+
+      .dashboard-system-status b {{
+        text-align: left !important;
+      }}
+
+      .calc-header {{
+        padding: 22px !important;
+      }}
+
+      .kpi-grid {{
+        grid-template-columns: repeat(2, minmax(160px, 1fr)) !important;
+      }}
+
+      .criteria-grid-row {{
+        grid-template-columns: 1fr !important;
+      }}
+
+      .demo-card-header,
+      .sale-card-header,
+      .premium-card-header,
+      .admin-page-header {{
+        flex-direction: column !important;
+      }}
+
+      .demo-header-note,
+      .sale-header-note,
+      .premium-header-note,
+      .admin-page-note {{
+        flex: 1 1 auto !important;
+        width: 100% !important;
+      }}
+
+      .criteria-radio fieldset,
+      .criteria-radio div[role="radiogroup"] {{
+        flex-wrap: wrap !important;
+      }}
+
+      .criteria-radio label {{
+        flex: 1 1 220px !important;
+      }}
+
+      .sale-card-header,
+      .premium-card-header {{
+        flex-direction: column !important;
+      }}
+
+      .sale-header-note,
+      .premium-header-note {{
+        flex: 1 1 auto !important;
+        width: 100% !important;
+      }}
+
+      .admin-page-header {{
+        flex-direction: column !important;
+      }}
+
+      .admin-page-note {{
+        flex: 1 1 auto !important;
+        width: 100% !important;
+      }}
+
+      .products-toolbar,
+      .maintenance-actions {{
+        flex-direction: column !important;
+      }}
+
+      .products-toolbar > *,
+      .maintenance-actions > *,
+      .sale-search-row > *,
+      .settings-grid > *,
+      .demo-key-fields > *,
+      .demo-meta-fields > *,
+      .director-fields > * {{
+        flex: 1 1 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        width: 100% !important;
+      }}
+    }}
+
+    @media (max-width: 768px) {{
+      :root {{
+        --font-base: 13px;
+        --card-pad: 14px;
+      }}
+
+      .gradio-container {{
+        padding: var(--space-3) !important;
+      }}
+
+      .login-hero,
+      .login-card,
+      .login-access-card,
+      .login-status-card {{
+        border-radius: var(--radius-lg) !important;
+        padding: 18px !important;
+      }}
+
+      .login-hero h1 {{
+        font-size: 26px !important;
+      }}
+
+      .login-hero h2 {{
+        font-size: 18px !important;
+      }}
+
+      .login-hero p {{
+        font-size: 13px !important;
+      }}
+
+      .login-card-title {{
+        font-size: 20px !important;
+      }}
+
+      .dashboard-topbar {{
+        border-radius: var(--radius-lg) !important;
+        padding: 14px !important;
+      }}
+
+      .dashboard-logo {{
+        flex-basis: 38px !important;
+        height: 38px !important;
+        width: 38px !important;
+      }}
+
+      .dashboard-title {{
+        font-size: 16px !important;
+      }}
+
+      .dashboard-subtitle {{
+        font-size: 11px !important;
+      }}
+
+      .actions-sidebar,
+      .director-card {{
+        border-radius: var(--radius-lg) !important;
+        padding: 14px !important;
+      }}
+
+      .add-action-row,
+      .secondary-action-row,
+      .director-fields,
+      .demo-action-row,
+      .products-toolbar,
+      .settings-grid {{
+        flex-direction: column !important;
+      }}
+
+      .add-action-button button,
+      .secondary-button button,
+      .danger-button button,
+      .demo-save-button button {{
+        width: 100% !important;
+      }}
+
+      .sale-card-header,
+      .premium-card-header {{
+        border-radius: var(--radius-lg) !important;
+        padding: 18px !important;
+      }}
+
+      .sale-card-header h2,
+      .premium-card-header h2 {{
+        font-size: 21px !important;
+      }}
+
+      .sale-search-row {{
+        flex-direction: column !important;
+      }}
+
+      .admin-page-header,
+      .admin-section,
+      .maintenance-card {{
+        border-radius: var(--radius-lg) !important;
+        padding: 16px !important;
+      }}
+
+      .admin-page-header h2 {{
+        font-size: 21px !important;
+      }}
+
+      .settings-grid {{
+        flex-direction: column !important;
+      }}
+
+      .calc-header {{
+        border-radius: var(--radius-lg) !important;
+        flex-direction: column !important;
+        padding: 20px !important;
+      }}
+
+      .calc-header h1 {{
+        font-size: 21px !important;
+      }}
+
+      .calc-header p {{
+        font-size: 13px !important;
+      }}
+
+      .calc-card,
+      .top-badge,
+      .action-list,
+      .criteria-accordion {{
+        border-radius: var(--radius-md) !important;
+      }}
+
+      .kpi-grid {{
+        grid-template-columns: 1fr !important;
+      }}
+
+      .gradio-container .tabs,
+      .gradio-container [role="tablist"] {{
+        overflow-x: auto !important;
+        justify-content: flex-start !important;
+      }}
+
+      .gradio-container [role="tab"],
+      .gradio-container button[role="tab"] {{
+        white-space: nowrap !important;
+      }}
+
+      .criteria-radio label {{
+        flex-basis: 100% !important;
+        min-height: 52px !important;
+      }}
+
+      .criteria-name-cell,
+      .criteria-comment-cell textarea {{
+        min-height: 52px !important;
+      }}
+    }}
     """
 
 # ============================================================
@@ -1886,95 +3892,158 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
     </div>
     """)
 
-    with gr.Group(visible=True) as login_group:
-        with gr.Row():
-            with gr.Column(scale=1):
-                gr.HTML(f"<div class='calc-card'><div class='calc-section-title'>Вход</div>{INIT_STATUS}</div>")
-                login_input = gr.Textbox(label="Логин", value="")
-                password_input = gr.Textbox(label="Пароль", type="password", value="")
-                login_btn = gr.Button("Войти", variant="primary")
-                login_error = gr.HTML("")
-            with gr.Column(scale=1):
-                gr.HTML("<div class='calc-card'><b>Доступы:</b><br>artur / 123<br>ruslan / 111<br>timur / 222<br>maria / 333<br>ildar / 444</div>")
+    with gr.Group(visible=True, elem_classes=["login-shell"]) as login_group:
+        gr.HTML("""
+        <section class="login-hero">
+          <div class="login-eyebrow">B2B dashboard</div>
+          <h1>ИРБИСТЕХ</h1>
+          <h2>Демонстрации, продажи и премии</h2>
+          <p>Единое рабочее пространство для учета действий менеджеров, расчета смет демонстраций, продаж оборудования и подтверждения премий директором.</p>
+        </section>
+        """)
+        with gr.Row(elem_classes=["login-grid"]):
+            with gr.Column(scale=6, elem_classes=["login-card"]):
+                gr.HTML("""
+                <div class="login-card-header">
+                  <div class="login-card-title">Вход в систему</div>
+                  <p class="login-card-subtitle">Используйте рабочий логин и пароль, чтобы открыть действия, расчеты и подтверждения.</p>
+                </div>
+                """)
+                login_input = gr.Textbox(label="Логин", value="", elem_classes=["login-field"])
+                password_input = gr.Textbox(label="Пароль", type="password", value="", elem_classes=["login-field"])
+                login_btn = gr.Button("Войти", variant="primary", elem_classes=["login-submit"])
+                login_error = gr.HTML("", elem_classes=["login-error-slot"])
+            with gr.Column(scale=5, elem_classes=["login-side-column"]):
+                gr.HTML(f"""
+                <div class="login-status-card">
+                  <div class="login-status-label">Статус данных</div>
+                  <div class="login-status-body">{INIT_STATUS}</div>
+                </div>
+                """)
+                gr.HTML("""
+                <div class="login-access-card">
+                  <div class="login-muted-title">Тестовые доступы</div>
+                  <p class="login-muted-text">Демо-учетные записи для проверки ролей директора и менеджеров.</p>
+                  <div class="login-access-list">
+                    <div class="login-access-item"><b>artur</b> / 123</div>
+                    <div class="login-access-item"><b>ruslan</b> / 111</div>
+                    <div class="login-access-item"><b>timur</b> / 222</div>
+                    <div class="login-access-item"><b>maria</b> / 333</div>
+                    <div class="login-access-item"><b>ildar</b> / 444</div>
+                  </div>
+                </div>
+                """)
 
-    with gr.Group(visible=False) as app_group:
-        user_badge = gr.HTML("")
-        with gr.Tabs():
-            with gr.Tab("ДЕМОНСТРАЦИИ И ПРОДАЖИ"):
-                with gr.Row():
-                    with gr.Column(scale=3):
-                        gr.HTML("<div class='calc-card'><div class='calc-section-title'>Список действий</div>Карточка умещается в две строки. Серые действия считаются закрытыми подтвержденной премией.</div>")
+    with gr.Group(visible=False, elem_classes=["dashboard-shell"]) as app_group:
+        with gr.Row(elem_classes=["dashboard-topbar"]):
+            with gr.Column(scale=7):
+                gr.HTML(f"""
+                <div class="dashboard-brand">
+                  <div class="dashboard-logo">И</div>
+                  <div>
+                    <div class="dashboard-title">ИРБИСТЕХ</div>
+                    <div class="dashboard-subtitle">Рабочий dashboard: демонстрации, продажи, премии</div>
+                  </div>
+                </div>
+                """)
+            with gr.Column(scale=5):
+                gr.HTML(f"<div class='dashboard-system-status'><span>Статус системы</span><b>{INIT_STATUS}</b></div>")
+                user_badge = gr.HTML("")
+        with gr.Tabs(elem_classes=["dashboard-tabs"]):
+            with gr.Tab("Действия"):
+                with gr.Row(elem_classes=["actions-layout"]):
+                    with gr.Column(scale=3, elem_classes=["actions-sidebar"]):
+                        gr.HTML("<div class='sidebar-head'><div><div class='sidebar-title'>Действия</div><p>Рабочая лента менеджеров с типом, статусом, датой и суммой.</p></div></div>")
                         manager_filter = gr.Dropdown(label="Фильтр по менеджеру", choices=MANAGER_FILTER_CHOICES, value="__all__", visible=False)
                         manager_to_add = gr.Dropdown(label="Добавить менеджеру", choices=MANAGER_CHOICES, value=MANAGER_LOGINS[0], visible=False)
                         action_list = gr.Radio(label="Действия", choices=[], elem_classes=["action-list"])
-                        with gr.Row():
-                            add_demo_btn = gr.Button("+ Демо")
-                            add_sale_btn = gr.Button("+ Продажа")
-                            add_premium_btn = gr.Button("+ Премия")
-                        with gr.Row():
-                            move_up_btn = gr.Button("↑ Выше")
-                            move_down_btn = gr.Button("↓ Ниже")
-                            delete_btn = gr.Button("Удалить")
-                        action_status = gr.Textbox(label="Статус", interactive=False)
-                    with gr.Column(scale=7):
-                        gr.HTML("<div class='calc-card'><div class='calc-section-title'>Подтверждение директора</div>После подтверждения директором менеджер не может менять это действие. Поле суммы можно скорректировать вручную.</div>")
-                        with gr.Row():
-                            director_confirmed = gr.Checkbox(label="Подтверждено директором", interactive=False)
-                            confirmed_amount = gr.Number(label="Сумма, подтвержденная директором", value=0, interactive=False)
-                            director_comment = gr.Textbox(label="Комментарий директора", interactive=False)
+                        gr.HTML("<div class='sidebar-actions-title'>Добавить действие</div>")
+                        with gr.Row(elem_classes=["add-action-row"]):
+                            add_demo_btn = gr.Button("+ Демонстрация", elem_classes=["add-action-button"])
+                            add_sale_btn = gr.Button("+ Продажа", elem_classes=["add-action-button"])
+                            add_premium_btn = gr.Button("+ Премия", elem_classes=["add-action-button"])
+                        gr.HTML("<div class='sidebar-actions-title'>Управление</div>")
+                        with gr.Row(elem_classes=["secondary-action-row"]):
+                            move_up_btn = gr.Button("Выше", elem_classes=["secondary-button"])
+                            move_down_btn = gr.Button("Ниже", elem_classes=["secondary-button"])
+                            delete_btn = gr.Button("Удалить", elem_classes=["danger-button"])
+                        action_status = gr.Textbox(label="Статус операции", interactive=False, elem_classes=["status-field"])
+                    with gr.Column(scale=7, elem_classes=["action-workspace"]):
+                        with gr.Group(elem_classes=["director-card"]):
+                            gr.HTML("<div class='director-card-head'><div><div class='director-title'>Подтверждение директора</div><p>Проверка, фиксация суммы и блокировка действия после закрытия периода.</p></div><span class='director-badge'>Approval</span></div>")
+                            with gr.Row(elem_classes=["director-fields"]):
+                                director_confirmed = gr.Checkbox(label="Подтверждено директором", interactive=False)
+                                confirmed_amount = gr.Number(label="Сумма, подтвержденная директором", value=0, interactive=False)
+                                director_comment = gr.Textbox(label="Комментарий директора", interactive=False)
 
-                        with gr.Group(visible=False) as demo_group:
-                            gr.HTML("<div class='calc-card'><div class='calc-section-title'>Демонстрация</div>Основные статьи сметы считаются через встроенный калькулятор. Нестандартные строки можно добавлять отдельно внизу.</div>")
-                            with gr.Row():
-                                demo_client = gr.Textbox(label="Клиент")
-                                demo_date = gr.Textbox(label="Дата")
-                                demo_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES)
-                            with gr.Row():
-                                demo_city = gr.Textbox(label="Город")
-                                demo_model = gr.Textbox(label="Модель")
-                            demo_task = gr.Textbox(label="Задача очистки", lines=2)
-                            demo_comment = gr.Textbox(label="Комментарий", lines=2)
-                            demo_calc_html = gr.HTML(initial_demo_html)
-                            demo_calc_state_json = gr.Textbox(value=initial_demo_state_json, visible=False, show_label=False, elem_id="demo-calc-state-json")
-                            demo_extra_expenses_df = dataframe_compat(headers=EXPENSE_COLUMNS, value=initial_demo_extra_df, row_count=(2,"dynamic"), col_count=(7,"fixed"), interactive=True, label="Дополнительные строки сметы")
-                            demo_kpi_html = gr.HTML("")
+                        with gr.Group(visible=False, elem_classes=["action-detail-card"]) as demo_group:
+                            gr.HTML("""
+                            <div class="demo-card-header">
+                              <div>
+                                <div class="demo-type-pill">Демонстрация</div>
+                                <h2>Карточка демонстрации</h2>
+                                <p>Заполните параметры выезда, рассчитайте расходы и выберите критерии, влияющие на итоговый вычет из премии.</p>
+                              </div>
+                              <div class="demo-header-note">Дата, менеджер и клиент указаны в ключевых полях ниже.</div>
+                            </div>
+                            """)
+                            with gr.Group(elem_classes=["demo-section", "demo-main-info"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Основная информация</div><p>Ключевые данные демонстрации для списка действий, отчетности и расчета.</p></div></div>")
+                                with gr.Row(elem_classes=["demo-key-fields"]):
+                                    demo_client = gr.Textbox(label="Клиент", elem_classes=["demo-key-field"])
+                                    demo_date = gr.Textbox(label="Дата", elem_classes=["demo-key-field"])
+                                    demo_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
+                                with gr.Row(elem_classes=["demo-meta-fields"]):
+                                    demo_city = gr.Textbox(label="Город")
+                                    demo_model = gr.Textbox(label="Модель")
+                                demo_task = gr.Textbox(label="Задача очистки", lines=2)
+                                demo_comment = gr.Textbox(label="Комментарий", lines=2)
+                            with gr.Group(elem_classes=["demo-section", "demo-calculator-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Калькулятор расходов</div><p>Отдельная смета демонстрации: вводные менеджера, системные ставки и автоматические формулы.</p></div></div>")
+                                demo_calc_html = gr.HTML(initial_demo_html)
+                                demo_calc_state_json = gr.Textbox(value=initial_demo_state_json, visible=False, show_label=False, elem_id="demo-calc-state-json")
+                                demo_extra_expenses_df = dataframe_compat(headers=EXPENSE_COLUMNS, value=initial_demo_extra_df, row_count=(2,"dynamic"), col_count=(7,"fixed"), interactive=True, label="Дополнительные строки сметы")
+                            with gr.Group(elem_classes=["demo-section", "demo-kpi-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Итоги расчета</div><p>Ключевые суммы и коэффициенты обновляются после пересчета или сохранения.</p></div></div>")
+                                demo_kpi_html = gr.HTML("", elem_classes=["demo-kpi-output"])
 
-                            gr.HTML("<div class='calc-card'><div class='calc-section-title'>Критерии снижения вычета</div>Каждый критерий занимает одну компактную строку: критерий и описание, уровни с баллами, комментарий менеджера.</div>")
-                            criterion_radios = []
-                            criterion_comments = []
-                            block_titles = {
-                                "P": "Блок 1. Подготовка к демонстрации",
-                                "R": "Блок 2. Оценка результатов демонстрации",
-                                "M": "Блок 3. Управленческий фактор",
-                            }
-                            block_notes = {
-                                "P": "Оценивает качество подготовки до выезда.",
-                                "R": "Оценивает фактический и коммерческий результат после показа.",
-                                "M": "Учитывает стратегические, логистические и управленческие обстоятельства.",
-                            }
-                            for block_code in ["P", "R", "M"]:
-                                block_open = block_code == "P"
-                                with gr.Accordion(block_titles[block_code], open=block_open, elem_classes=["criteria-accordion", "criteria-block-compact"]):
-                                    gr.Markdown(f"**{block_titles[block_code]}** — {block_notes[block_code]}")
-                                    for cr in [x for x in criteria_defs if x.get("block") == block_code]:
-                                        with gr.Row(elem_classes=["criteria-grid-row"]):
-                                            gr.Markdown(f"**{cr['code']}. {cr['title']}**\n{cr['desc']}", elem_classes=["criteria-name-cell"])
-                                            radio = gr.Radio(
-                                                label="",
-                                                choices=criteria_choice_labels(cr),
-                                                value=criterion_label(cr, 0),
-                                                elem_classes=["criteria-radio", "criteria-levels-cell"],
-                                                show_label=False,
-                                            )
-                                            comment = gr.Textbox(
-                                                label="Комментарий",
-                                                lines=2,
-                                                placeholder="Подтверждение выбранного уровня",
-                                                elem_classes=["criteria-comment-cell"],
-                                            )
-                                        criterion_radios.append(radio)
-                                        criterion_comments.append(comment)
-                            gr.HTML('''
+                            with gr.Group(elem_classes=["demo-section", "demo-criteria-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Критерии снижения вычета</div><p>Выбор уровней влияет на коэффициенты и итоговый вычет. Заполняйте комментарии там, где нужно подтвердить выбранный уровень.</p></div><span class='demo-section-badge'>Влияет на вычет</span></div>")
+                                criterion_radios = []
+                                criterion_comments = []
+                                block_titles = {
+                                    "P": "P — Подготовка",
+                                    "R": "R — Результат",
+                                    "M": "M — Управленческий фактор",
+                                }
+                                block_notes = {
+                                    "P": "Оценивает качество подготовки до выезда.",
+                                    "R": "Оценивает фактический и коммерческий результат после показа.",
+                                    "M": "Учитывает стратегические, логистические и управленческие обстоятельства.",
+                                }
+                                for block_code in ["P", "R", "M"]:
+                                    block_open = block_code == "P"
+                                    with gr.Accordion(block_titles[block_code], open=block_open, elem_classes=["criteria-accordion", "criteria-block-compact"]):
+                                        gr.Markdown(f"**{block_titles[block_code]}** — {block_notes[block_code]}")
+                                        for cr in [x for x in criteria_defs if x.get("block") == block_code]:
+                                            with gr.Row(elem_classes=["criteria-grid-row"]):
+                                                gr.Markdown(f"**{cr['code']}. {cr['title']}**\n{cr['desc']}", elem_classes=["criteria-name-cell"])
+                                                radio = gr.Radio(
+                                                    label="",
+                                                    choices=criteria_choice_labels(cr),
+                                                    value=criterion_label(cr, 0),
+                                                    elem_classes=["criteria-radio", "criteria-levels-cell"],
+                                                    show_label=False,
+                                                )
+                                                comment = gr.Textbox(
+                                                    label="Комментарий",
+                                                    lines=2,
+                                                    placeholder="Подтверждение выбранного уровня",
+                                                    elem_classes=["criteria-comment-cell"],
+                                                )
+                                            criterion_radios.append(radio)
+                                            criterion_comments.append(comment)
+                                gr.HTML('''
                             <script>
                             (function(){
                               function bindIrbisCriteriaAccordions(){
@@ -2004,76 +4073,145 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                             })();
                             </script>
                             ''')
-                            with gr.Row():
-                                demo_recalc_btn = gr.Button("Пересчитать")
-                                demo_save_btn = gr.Button("Сохранить демонстрацию", variant="primary")
-                            demo_status = gr.Textbox(label="Статус", interactive=False)
+                            with gr.Group(elem_classes=["demo-action-panel"]):
+                                with gr.Row(elem_classes=["demo-action-row"]):
+                                    demo_recalc_btn = gr.Button("Пересчитать", elem_classes=["secondary-button"])
+                                    demo_save_btn = gr.Button("Сохранить демонстрацию", variant="primary", elem_classes=["demo-save-button"])
+                                demo_status = gr.Textbox(label="Статус сохранения", interactive=False, elem_classes=["status-field", "demo-status-field"])
 
-                        with gr.Group(visible=False) as sale_group:
-                            gr.HTML("<div class='calc-card'><div class='calc-section-title'>Продажа</div>Товар можно добавить только из справочника. Начните вводить минимум 3 символа.</div>")
-                            with gr.Row():
-                                sale_date = gr.Textbox(label="Дата")
-                                sale_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES)
-                                sale_client = gr.Textbox(label="Клиент")
-                            sale_comment = gr.Textbox(label="Комментарий", lines=2)
-                            with gr.Row():
-                                sale_product_search = gr.Textbox(label="Поиск товара")
-                                sale_product_select = gr.Dropdown(label="Подходящие товары", choices=[])
-                            sale_rows_df = dataframe_compat(headers=SALE_COLUMNS, value=blank_df(SALE_COLUMNS), row_count=(1,"dynamic"), col_count=(13,"fixed"), interactive=True, label="Товары продажи")
-                            sale_kpi_html = gr.HTML("")
-                            with gr.Row():
-                                sale_recalc_btn = gr.Button("Пересчитать")
-                                sale_save_btn = gr.Button("Сохранить продажу", variant="primary")
-                            sale_status = gr.Textbox(label="Статус", interactive=False)
+                        with gr.Group(visible=False, elem_classes=["action-detail-card"]) as sale_group:
+                            gr.HTML("""
+                            <div class="sale-card-header">
+                              <div>
+                                <div class="sale-type-pill">Продажа</div>
+                                <h2>Карточка продажи</h2>
+                                <p>Добавьте товар из справочника, проверьте расчет премии и сохраните продажу в периоде менеджера.</p>
+                              </div>
+                              <div class="sale-header-note">Товары добавляются только из справочника, чтобы сохранить корректные цены и маржу.</div>
+                            </div>
+                            """)
+                            with gr.Group(elem_classes=["demo-section", "sale-main-info"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Основная информация</div><p>Дата, менеджер, клиент и комментарий для карточки продажи.</p></div></div>")
+                                with gr.Row(elem_classes=["demo-key-fields"]):
+                                    sale_date = gr.Textbox(label="Дата", elem_classes=["demo-key-field"])
+                                    sale_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
+                                    sale_client = gr.Textbox(label="Клиент", elem_classes=["demo-key-field"])
+                                sale_comment = gr.Textbox(label="Комментарий", lines=2)
+                            with gr.Group(elem_classes=["demo-section", "sale-product-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Поиск товара</div><p>Введите минимум 3 символа, выберите подходящий товар из справочника и он добавится в таблицу продажи.</p></div><span class='demo-section-badge'>Справочник</span></div>")
+                                with gr.Row(elem_classes=["sale-search-row"]):
+                                    sale_product_search = gr.Textbox(label="Поиск товара", elem_classes=["sale-search-field"])
+                                    sale_product_select = gr.Dropdown(label="Подходящие товары", choices=[], elem_classes=["sale-select-field"])
+                                sale_rows_df = dataframe_compat(headers=SALE_COLUMNS, value=blank_df(SALE_COLUMNS), row_count=(1,"dynamic"), col_count=(13,"fixed"), interactive=True, label="Товары продажи")
+                            with gr.Group(elem_classes=["demo-section", "sale-kpi-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Итоги продажи</div><p>Расчетная премия и сумма продажи обновляются после выбора товара или пересчета.</p></div></div>")
+                                sale_kpi_html = gr.HTML("", elem_classes=["demo-kpi-output"])
+                            with gr.Group(elem_classes=["demo-action-panel", "sale-action-panel"]):
+                                with gr.Row(elem_classes=["demo-action-row"]):
+                                    sale_recalc_btn = gr.Button("Пересчитать", elem_classes=["secondary-button"])
+                                    sale_save_btn = gr.Button("Сохранить продажу", variant="primary", elem_classes=["demo-save-button"])
+                                sale_status = gr.Textbox(label="Статус сохранения", interactive=False, elem_classes=["status-field", "demo-status-field"])
 
-                        with gr.Group(visible=False) as premium_group:
-                            gr.HTML("<div class='calc-card'><div class='calc-section-title'>Выплата премии</div>Премия считается по подтвержденным директором суммам продаж и демонстраций.</div>")
-                            with gr.Row():
-                                premium_date = gr.Textbox(label="Дата")
-                                premium_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES)
-                            premium_comment = gr.Textbox(label="Комментарий", lines=2)
-                            premium_sales_df = dataframe_compat(label="Продажи периода", value=blank_df([]), interactive=False)
-                            premium_demos_df = dataframe_compat(label="Демонстрации периода", value=blank_df([]), interactive=False)
-                            premium_kpi_html = gr.HTML("")
-                            premium_save_btn = gr.Button("Сохранить премию", variant="primary")
-                            premium_status = gr.Textbox(label="Статус", interactive=False)
+                        with gr.Group(visible=False, elem_classes=["action-detail-card"]) as premium_group:
+                            gr.HTML("""
+                            <div class="premium-card-header">
+                              <div>
+                                <div class="premium-type-pill">Выплата премии</div>
+                                <h2>Закрытие периода</h2>
+                                <p>Премия считается по подтвержденным продажам и вычетам за демонстрации с момента предыдущей выплаты.</p>
+                              </div>
+                              <div class="premium-header-note">Подтвержденная премия визуально и логически закрывает период.</div>
+                            </div>
+                            """)
+                            with gr.Group(elem_classes=["demo-section", "premium-main-info"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Параметры выплаты</div><p>Дата выплаты, менеджер и комментарий к закрытию периода.</p></div></div>")
+                                with gr.Row(elem_classes=["demo-key-fields"]):
+                                    premium_date = gr.Textbox(label="Дата", elem_classes=["demo-key-field"])
+                                    premium_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
+                                premium_comment = gr.Textbox(label="Комментарий", lines=2)
+                            with gr.Group(elem_classes=["demo-section", "premium-kpi-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Финансовый итог</div><p>Сводка продаж, демо-вычетов и суммы к выплате.</p></div><span class='premium-close-badge'>Закрытие периода</span></div>")
+                                premium_kpi_html = gr.HTML("", elem_classes=["demo-kpi-output", "premium-kpi-output"])
+                            with gr.Group(elem_classes=["demo-section", "premium-tables-section"]):
+                                gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Состав периода</div><p>Продажи и демонстрации, вошедшие в расчет премии.</p></div></div>")
+                                premium_sales_df = dataframe_compat(label="Продажи периода", value=blank_df([]), interactive=False)
+                                premium_demos_df = dataframe_compat(label="Демонстрации периода", value=blank_df([]), interactive=False)
+                            with gr.Group(elem_classes=["demo-action-panel", "premium-action-panel"]):
+                                premium_save_btn = gr.Button("Сохранить премию", variant="primary", elem_classes=["demo-save-button", "premium-save-button"])
+                                premium_status = gr.Textbox(label="Статус сохранения", interactive=False, elem_classes=["status-field", "demo-status-field"])
 
-            with gr.Tab("ТОВАРЫ"):
-                gr.HTML("<div class='calc-card'><div class='calc-section-title'>Товары и премии</div>Директор добавляет товары вручную или через Excel-шаблон. Менеджеры видят справочник без редактирования.</div>")
-                with gr.Row():
-                    product_template_btn = gr.Button("Скачать шаблон товаров")
-                    product_template_file = gr.File(label="Шаблон")
-                    product_upload = gr.File(label="Загрузить заполненный шаблон", file_types=[".xlsx"])
-                    product_upload_btn = gr.Button("Загрузить товары", visible=False)
-                    product_save_btn = gr.Button("Сохранить товары", variant="primary", visible=False)
-                products_df = dataframe_compat(headers=PRODUCT_COLUMNS, value=products_to_df(APP_STATE["products"], APP_STATE["settings"]), row_count=(5,"dynamic"), col_count=(10,"fixed"), interactive=False, label="Справочник товаров")
-                products_status = gr.Textbox(label="Статус", interactive=False)
+            with gr.Tab("Товары"):
+                gr.HTML("""
+                <div class="admin-page-header">
+                  <div>
+                    <div class="admin-page-eyebrow">Справочник</div>
+                    <h2>Товары и премии</h2>
+                    <p>Единый справочник оборудования, цен, минимальных цен, маржи и расчетной премии. Редактирование доступно директору, менеджеры используют справочник в режиме просмотра.</p>
+                  </div>
+                  <div class="admin-page-note">Источник товаров для карточек продаж</div>
+                </div>
+                """)
+                with gr.Group(elem_classes=["admin-section", "products-toolbar-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Управление справочником</div><p>Скачайте шаблон, заполните его и загрузите товары. Сохранение доступно директору.</p></div></div>")
+                    with gr.Row(elem_classes=["products-toolbar"]):
+                        product_template_btn = gr.Button("Скачать шаблон товаров", elem_classes=["secondary-button"])
+                        product_template_file = gr.File(label="Шаблон", elem_classes=["toolbar-file"])
+                        product_upload = gr.File(label="Загрузить заполненный шаблон", file_types=[".xlsx"], elem_classes=["toolbar-file"])
+                        product_upload_btn = gr.Button("Загрузить товары", visible=False, elem_classes=["secondary-button"])
+                        product_save_btn = gr.Button("Сохранить товары", variant="primary", visible=False, elem_classes=["demo-save-button"])
+                with gr.Group(elem_classes=["admin-section", "products-table-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Справочник товаров</div><p>Таблица может прокручиваться горизонтально на узких экранах.</p></div></div>")
+                    products_df = dataframe_compat(headers=PRODUCT_COLUMNS, value=products_to_df(APP_STATE["products"], APP_STATE["settings"]), row_count=(5,"dynamic"), col_count=(10,"fixed"), interactive=False, label="Справочник товаров")
+                    products_status = gr.Textbox(label="Статус товаров", interactive=False, elem_classes=["status-field", "admin-status-field"])
 
-            with gr.Tab("НАСТРОЙКИ"):
-                gr.HTML("<div class='calc-card'><div class='calc-section-title'>Настройки</div>Здесь находятся коэффициенты, баллы, смета, параметры интерфейса, резервные копии JSON и экспорт.</div>")
-                with gr.Row():
-                    vat_pct = gr.Number(label="НДС, %", value=decimal_to_pct(settings0.get("vat_rate",0.22)), interactive=False)
-                    bonus_pct = gr.Number(label="Ставка премии, %", value=decimal_to_pct(settings0.get("bonus_rate",0.65)), interactive=False)
-                    max_ded_pct = gr.Number(label="Максимальный вычет из премии, %", value=decimal_to_pct(settings0.get("max_demo_deduction_pct",1)), interactive=False)
-                with gr.Row():
-                    company_support_vat = gr.Number(label="Общая фора / помощь ООО, руб. с НДС", value=settings0.get("company_support_vat",30000), interactive=False)
-                    payroll_pct = gr.Number(label="Налоги на ФОТ, %", value=decimal_to_pct(settings0.get("payroll_tax_rate",0.30)), interactive=False)
-                    diesel_l = gr.Number(label="Расход дизеля, л / 100 км", value=settings0.get("diesel_l_per_100km",12), interactive=False)
+            with gr.Tab("Настройки"):
+                gr.HTML("""
+                <div class="admin-page-header settings-header">
+                  <div>
+                    <div class="admin-page-eyebrow">Admin panel</div>
+                    <h2>Настройки системы</h2>
+                    <p>Финансовые коэффициенты, смета демонстрации, критерии, параметры интерфейса, резервные копии и экспорт рабочих данных.</p>
+                  </div>
+                  <div class="admin-page-note">Редактирование доступно директору</div>
+                </div>
+                """)
+                with gr.Group(elem_classes=["admin-section", "finance-settings-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Финансовые параметры</div><p>Ключевые ставки, ограничения и базовые параметры расчетов.</p></div></div>")
+                    with gr.Row(elem_classes=["settings-grid"]):
+                        vat_pct = gr.Number(label="НДС, %", value=decimal_to_pct(settings0.get("vat_rate",0.22)), interactive=False)
+                        bonus_pct = gr.Number(label="Ставка премии, %", value=decimal_to_pct(settings0.get("bonus_rate",0.65)), interactive=False)
+                        max_ded_pct = gr.Number(label="Максимальный вычет из премии, %", value=decimal_to_pct(settings0.get("max_demo_deduction_pct",1)), interactive=False)
+                    with gr.Row(elem_classes=["settings-grid"]):
+                        company_support_vat = gr.Number(label="Общая фора / помощь ООО, руб. с НДС", value=settings0.get("company_support_vat",30000), interactive=False)
+                        payroll_pct = gr.Number(label="Налоги на ФОТ, %", value=decimal_to_pct(settings0.get("payroll_tax_rate",0.30)), interactive=False)
+                        diesel_l = gr.Number(label="Расход дизеля, л / 100 км", value=settings0.get("diesel_l_per_100km",12), interactive=False)
+                with gr.Group(elem_classes=["admin-section", "criteria-settings-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Критерии и баллы</div><p>Настройка блоков P/R/M и уровней, влияющих на вычет демонстрации.</p></div></div>")
+                    criteria_settings_df = dataframe_compat(headers=CRITERIA_SETTINGS_COLUMNS, value=criteria_to_df(settings0), row_count=(22,"dynamic"), col_count=(5,"fixed"), interactive=False, label="Баллы уровней критериев")
+                with gr.Group(elem_classes=["admin-section", "expense-settings-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Расходы демонстрации</div><p>Ставки, единицы измерения, редактируемость и типы расчета для сметы демонстрации.</p></div></div>")
+                    expense_settings_df = dataframe_compat(headers=EXPENSE_SETTINGS_COLUMNS, value=expense_settings_to_df(settings0), row_count=(17,"dynamic"), col_count=(9,"fixed"), interactive=False, label="Настройки сметы демонстрации")
+                with gr.Group(elem_classes=["admin-section", "ui-settings-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Интерфейс</div><p>Параметры отображения таблиц, критериев и базовой типографики.</p></div></div>")
                     font_family = gr.Dropdown(label="Шрифт интерфейса", choices=FONT_CHOICES, value="Arial", interactive=False)
-                criteria_settings_df = dataframe_compat(headers=CRITERIA_SETTINGS_COLUMNS, value=criteria_to_df(settings0), row_count=(22,"dynamic"), col_count=(5,"fixed"), interactive=False, label="Баллы уровней критериев")
-                expense_settings_df = dataframe_compat(headers=EXPENSE_SETTINGS_COLUMNS, value=expense_settings_to_df(settings0), row_count=(17,"dynamic"), col_count=(9,"fixed"), interactive=False, label="Настройки сметы демонстрации")
-                ui_settings_df = dataframe_compat(headers=UI_SETTINGS_COLUMNS, value=ui_settings_to_df(settings0), row_count=(6,"fixed"), col_count=(3,"fixed"), interactive=False, label="Настройки интерфейса")
-                settings_save_btn = gr.Button("Сохранить настройки", variant="primary", visible=False)
-                settings_status = gr.Textbox(label="Статус", interactive=False)
-                gr.HTML("<div class='calc-card'><div class='calc-section-title'>Резервные копии и экспорт</div></div>")
-                with gr.Row():
-                    export_json_btn = gr.Button("Скачать JSON")
-                    export_json_file = gr.File(label="JSON")
-                    import_json_file = gr.File(label="Загрузить JSON", file_types=[".json"])
-                    import_json_btn = gr.Button("Импорт JSON")
-                    export_xlsx_btn = gr.Button("Экспорт в Excel")
-                    export_xlsx_file = gr.File(label="Excel")
-                json_status = gr.Textbox(label="Статус JSON/Excel", interactive=False)
+                    ui_settings_df = dataframe_compat(headers=UI_SETTINGS_COLUMNS, value=ui_settings_to_df(settings0), row_count=(6,"fixed"), col_count=(3,"fixed"), interactive=False, label="Настройки интерфейса")
+                with gr.Group(elem_classes=["admin-section", "settings-save-section"]):
+                    settings_save_btn = gr.Button("Сохранить настройки", variant="primary", visible=False, elem_classes=["demo-save-button"])
+                    settings_status = gr.Textbox(label="Статус настроек", interactive=False, elem_classes=["status-field", "admin-status-field"])
+                with gr.Group(elem_classes=["admin-section", "maintenance-section"]):
+                    gr.HTML("<div class='admin-section-head'><div><div class='admin-section-title'>Резервные копии и экспорт</div><p>Панель обслуживания для JSON-резервов и Excel-выгрузок. Импорт JSON перезаписывает рабочие данные после обработки файла.</p></div><span class='maintenance-badge'>Maintenance</span></div>")
+                    with gr.Row(elem_classes=["maintenance-actions"]):
+                        with gr.Column(scale=1, elem_classes=["maintenance-card", "export-card"]):
+                            gr.HTML("<div class='maintenance-card-title'>Export actions</div><p>Скачивание данных без изменения состояния системы.</p>")
+                            export_json_btn = gr.Button("Скачать JSON", elem_classes=["secondary-button"])
+                            export_json_file = gr.File(label="JSON")
+                            export_xlsx_btn = gr.Button("Экспорт в Excel", elem_classes=["secondary-button"])
+                            export_xlsx_file = gr.File(label="Excel")
+                        with gr.Column(scale=1, elem_classes=["maintenance-card", "import-card"]):
+                            gr.HTML("<div class='maintenance-card-title'>Import actions</div><p>Загрузка JSON может изменить рабочие данные. Используйте аккуратно.</p>")
+                            import_json_file = gr.File(label="Загрузить JSON", file_types=[".json"])
+                            import_json_btn = gr.Button("Импорт JSON", elem_classes=["danger-button"])
+                    json_status = gr.Textbox(label="Статус JSON/Excel", interactive=False, elem_classes=["status-field", "admin-status-field"])
 
     detail_outputs = [current_action_id, demo_group, sale_group, premium_group, director_confirmed, confirmed_amount, director_comment, demo_client, demo_date, demo_manager, demo_city, demo_model, demo_task, demo_comment, demo_calc_html, demo_calc_state_json, demo_extra_expenses_df, demo_kpi_html] + criterion_radios + criterion_comments + [sale_date, sale_manager, sale_client, sale_comment, sale_rows_df, sale_kpi_html, sale_product_search, sale_product_select, premium_date, premium_manager, premium_comment, premium_sales_df, premium_demos_df, premium_kpi_html]
 
