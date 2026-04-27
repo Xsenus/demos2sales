@@ -176,6 +176,13 @@ MANAGER_CHOICES = [(USERS[k]["name"], k) for k in MANAGER_LOGINS]
 MANAGER_FILTER_CHOICES = [("Все менеджеры", "__all__")] + MANAGER_CHOICES
 FONT_CHOICES = ["Arial"]
 
+
+def manager_dropdown_value(login):
+    """Значение для gr.Dropdown менеджера: только логин из MANAGER_LOGINS или None (иначе Gradio предупреждает)."""
+    v = (str(login).strip() if login is not None else "")
+    return v if v in MANAGER_LOGINS else None
+
+
 PRODUCT_COLUMNS = [
     "ID товара", "Артикул", "Наименование ТМЦ", "Цена руб. с НДС",
     "Цена руб. без НДС (A)", "Минимальная цена продажи без НДС (B)",
@@ -1471,7 +1478,7 @@ def load_action_details(user, choice):
         crit_values.append(criterion_label(cr, 0))
         crit_comments.append("")
     if not action:
-        return ["", gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), False, 0, ""] + ["", today_str(), "", "", "", "", "", default_demo_html, default_demo_state_json, default_demo_extra_df, ""] + crit_values + crit_comments + [today_str(), "", "", "", blank_df(SALE_COLUMNS), "", "", gr.update(choices=[], value=None), today_str(), "", "", blank_df([]), blank_df([]), ""]
+        return ["", gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), False, 0, ""] + ["", today_str(), None, "", "", "", "", default_demo_html, default_demo_state_json, default_demo_extra_df, ""] + crit_values + crit_comments + [today_str(), None, "", "", blank_df(SALE_COLUMNS), "", "", gr.update(choices=[], value=None), today_str(), None, "", blank_df([]), blank_df([]), ""]
 
     confirmed_amount = action.get("confirmed_amount")
     director_comment = action.get("director_comment", "")
@@ -1486,20 +1493,20 @@ def load_action_details(user, choice):
             cv = (action.get("criteria") or {}).get(cr["code"], {"level_index":0, "manager_comment":""})
             crit_values.append(criterion_label(cr, cv.get("level_index", 0)))
             crit_comments.append(cv.get("manager_comment", ""))
-        return [action["id"], gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), bool(action.get("is_director_confirmed")), confirmed_amount, director_comment, action.get("client",""), action.get("date",today_str()), action.get("manager_login",""), action.get("city",""), action.get("model",""), action.get("task_description",""), action.get("comment",""), demo_html, demo_state_json, demo_extra_df, demo_kpi(action)] + crit_values + crit_comments + [today_str(), "", "", "", blank_df(SALE_COLUMNS), "", "", gr.update(choices=[], value=None), today_str(), "", "", blank_df([]), blank_df([]), ""]
+        return [action["id"], gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), bool(action.get("is_director_confirmed")), confirmed_amount, director_comment, action.get("client",""), action.get("date",today_str()), manager_dropdown_value(action.get("manager_login")), action.get("city",""), action.get("model",""), action.get("task_description",""), action.get("comment",""), demo_html, demo_state_json, demo_extra_df, demo_kpi(action)] + crit_values + crit_comments + [today_str(), None, "", "", blank_df(SALE_COLUMNS), "", "", gr.update(choices=[], value=None), today_str(), None, "", blank_df([]), blank_df([]), ""]
 
     if action["type"] == ACTION_SALE:
         calc = calculate_sale(action, APP_STATE["products"], settings)
         if confirmed_amount is None:
             confirmed_amount = round(calc["bonus_net"],2)
-        return [action["id"], gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), bool(action.get("is_director_confirmed")), confirmed_amount, director_comment] + ["", today_str(), "", "", "", "", "", default_demo_html, default_demo_state_json, default_demo_extra_df, ""] + crit_values + crit_comments + [action.get("date",today_str()), action.get("manager_login",""), action.get("client",""), action.get("comment",""), calc["rows_df"], sale_kpi(action), "", gr.update(choices=[], value=None), today_str(), "", "", blank_df([]), blank_df([]), ""]
+        return [action["id"], gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), bool(action.get("is_director_confirmed")), confirmed_amount, director_comment] + ["", today_str(), None, "", "", "", "", default_demo_html, default_demo_state_json, default_demo_extra_df, ""] + crit_values + crit_comments + [action.get("date",today_str()), manager_dropdown_value(action.get("manager_login")), action.get("client",""), action.get("comment",""), calc["rows_df"], sale_kpi(action), "", gr.update(choices=[], value=None), today_str(), None, "", blank_df([]), blank_df([]), ""]
 
     calc = calculate_premium(action, APP_STATE, settings)
     if confirmed_amount is None:
         confirmed_amount = round(calc["payout"],2)
     sale_df = calc["sale_rows_df"] if not calc["sale_rows_df"].empty else blank_df(["Дата", "Клиент", "Премия расчетная", "Подтверждено директором"])
     demo_df = calc["demo_rows_df"] if not calc["demo_rows_df"].empty else blank_df(["Дата", "Клиент", "Вычет расчетный", "Подтверждено директором", "Демо подтверждено"])
-    return [action["id"], gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), bool(action.get("is_director_confirmed")), confirmed_amount, director_comment] + ["", today_str(), "", "", "", "", "", default_demo_html, default_demo_state_json, default_demo_extra_df, ""] + crit_values + crit_comments + [today_str(), "", "", "", blank_df(SALE_COLUMNS), "", "", gr.update(choices=[], value=None), action.get("date",today_str()), action.get("manager_login",""), action.get("comment",""), sale_df, demo_df, premium_kpi(action)]
+    return [action["id"], gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), bool(action.get("is_director_confirmed")), confirmed_amount, director_comment] + ["", today_str(), None, "", "", "", "", default_demo_html, default_demo_state_json, default_demo_extra_df, ""] + crit_values + crit_comments + [today_str(), None, "", "", blank_df(SALE_COLUMNS), "", "", gr.update(choices=[], value=None), action.get("date",today_str()), manager_dropdown_value(action.get("manager_login")), action.get("comment",""), sale_df, demo_df, premium_kpi(action)]
 
 
 def refresh_actions(user, manager_filter):
@@ -1809,26 +1816,219 @@ def build_css(settings=None):
 
     .gradio-container {{
       background: #FFFFFF !important;
+      box-sizing: border-box !important;
       color: var(--color-text) !important;
+      display: flex !important;
+      flex-direction: column !important;
       font-family: {font}, sans-serif !important;
       font-size: var(--font-base) !important;
       line-height: 1.5 !important;
       max-width: 100% !important;
+      min-height: 100dvh !important;
       min-height: 100vh !important;
-      padding: 10px 20px 0 !important;
+      overflow-x: hidden !important;
+      overflow-x: clip !important;
+      padding: 0 0 12px !important;
       width: 100% !important;
     }}
 
     html,
-    body,
+    body {{
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+      box-sizing: border-box !important;
+      margin: 0 !important;
+      overflow-x: hidden !important;
+      overflow-x: clip !important;
+      padding: 0 !important;
+    }}
+
     #root,
-    gradio-app,
-    .gradio-container,
+    gradio-app {{
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+      box-sizing: border-box !important;
+      max-width: 100% !important;
+      width: 100% !important;
+    }}
+
     .gradio-container > .main,
     .gradio-container .main {{
       background: #FFFFFF !important;
-      max-width: none !important;
+      background-color: #FFFFFF !important;
+      box-sizing: border-box !important;
+      flex: 1 1 auto !important;
+      max-width: 100% !important;
+      min-height: 0 !important;
       width: 100% !important;
+    }}
+
+    html:has(#irbis-login-shell:not(.hide)) {{
+      height: 100% !important;
+    }}
+
+    html:has(#irbis-login-shell:not(.hide)) body {{
+      height: 100% !important;
+      margin: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) #root,
+    body:has(#irbis-login-shell:not(.hide)) gradio-app {{
+      margin: 0 !important;
+      padding-top: 0 !important;
+    }}
+
+    /* Экран входа: рамка ровно один viewport; прокрутка документа не растёт (при нехватке высоты — только внутри .main) */
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container {{
+      box-sizing: border-box !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-height: 100vh !important;
+      max-height: 100dvh !important;
+      min-height: 100vh !important;
+      min-height: 100dvh !important;
+      overflow: hidden !important;
+      padding-bottom: 0 !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      padding-top: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container > .main,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container > main,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main {{
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow-x: hidden !important;
+      overflow-x: clip !important;
+      overflow-y: auto !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main {{
+      gap: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main .fillable,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main .wrap,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main .contain,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main .fillable,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main .wrap,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main .contain {{
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .login-grid,
+    #irbis-login-shell:not(.hide) .login-grid {{
+      align-items: center !important;
+      flex: 1 1 auto !important;
+      justify-content: center !important;
+      min-height: 0 !important;
+      padding: clamp(8px, 2vh, 24px) 16px !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .gr-group.login-shell > .styler,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .login-shell.gr-group > .styler {{
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .login-card {{
+      min-height: 0 !important;
+    }}
+
+    /* Gradio 5: внутренний .app — width 100% + padding; ограничиваем ширину */
+    .gradio-container main .app,
+    .gradio-container .main .app {{
+      box-sizing: border-box !important;
+      max-width: 100% !important;
+      width: 100% !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main .app,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main .app {{
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      margin-top: 0 !important;
+      min-height: 0 !important;
+      padding-bottom: 0 !important;
+      padding-top: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main .fillable,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main .fillable {{
+      padding-bottom: 0 !important;
+      padding-top: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main > .gr-group.login-shell,
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main > .login-shell.gr-group {{
+      align-self: stretch !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+    }}
+
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container .main div:has(> .gr-group.login-shell),
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main div:has(> #irbis-login-shell),
+    body:has(#irbis-login-shell:not(.hide)) .gradio-container main div:has(> .gr-group.login-shell) {{
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+    }}
+
+    #irbis-login-shell:not(.hide) {{
+      align-self: stretch !important;
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      margin-top: 0 !important;
+      min-height: 0 !important;
+      width: 100% !important;
+    }}
+
+    #irbis-login-shell:not(.hide) > .styler {{
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      gap: 0 !important;
+      min-height: 0 !important;
+    }}
+
+    #irbis-login-shell:not(.hide) .form {{
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+    }}
+
+    #irbis-login-shell:not(.hide) .login-card {{
+      min-height: 0 !important;
+    }}
+
+    #irbis-login-shell:not(.hide) .login-hero {{
+      margin-top: 0 !important;
+      padding: clamp(16px, 2.8vh, 30px) 24px clamp(18px, 3.2vh, 34px) !important;
+    }}
+
+    .gradio-container .main > div,
+    .gradio-container .main .fillable,
+    .gradio-container .main .wrap {{
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+    }}
+
+    .gradio-container .contain {{
+      background: transparent !important;
     }}
 
     .gradio-container *,
@@ -1864,6 +2064,23 @@ def build_css(settings=None):
     .gradio-container > .main,
     .gradio-container .main {{
       gap: var(--space-5) !important;
+      overflow-x: hidden !important;
+      overflow-x: clip !important;
+      position: relative !important;
+    }}
+
+    /* Первый ряд .main — gr.HTML со <style>; вне потока, иначе min-height login-shell + gap дают лишнюю высоту и вертикальную прокрутку */
+    .gradio-container .main > div:first-child {{
+      height: 0 !important;
+      left: 0 !important;
+      margin: 0 !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+      pointer-events: none !important;
+      position: absolute !important;
+      top: 0 !important;
+      width: 1px !important;
     }}
 
     .gradio-container .contain,
@@ -2035,33 +2252,121 @@ def build_css(settings=None):
     }}
 
     .login-shell {{
-      align-items: center !important;
-      background: transparent !important;
+      align-items: stretch !important;
+      background: #FFFFFF !important;
       border: 0 !important;
       box-shadow: none !important;
       display: flex !important;
       flex-direction: column !important;
       justify-content: flex-start !important;
-      max-width: none !important;
       margin: 0 !important;
-      min-height: auto !important;
-      padding: 0 0 10px !important;
+      max-width: 100% !important;
+      min-height: 0 !important;
+      overflow-x: hidden !important;
+      overflow-x: clip !important;
+      overflow-y: visible !important;
+      padding: 0 !important;
       width: 100% !important;
     }}
 
-    .login-hero {{
-      position: relative !important;
-      overflow: hidden !important;
-      border: 1px solid rgba(37, 99, 235, .14) !important;
-      border-radius: var(--radius-xl) !important;
-      background:
-        radial-gradient(circle at 88% 18%, rgba(16,185,129,.16), transparent 22rem),
-        linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 58%, #F8FAFC 100%) !important;
-      box-shadow: var(--shadow-sm) !important;
-      padding: 18px 24px !important;
-      margin: 0 auto 10px !important;
-      max-width: 1120px !important;
+    /* Gradio 5: gr.Group → .gr-group — в компоненте у div заданы border и фон --block-border-color (серая «коробка») */
+    .gr-group.login-shell,
+    .login-shell.gr-group {{
+      --block-border-width: 0 !important;
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+      border: 0 !important;
+      border-width: 0 !important;
+      box-shadow: none !important;
+      flex: 1 1 auto !important;
+      margin-top: 0 !important;
+      min-height: 0 !important;
+      outline: none !important;
+    }}
+
+    .gr-group.login-shell > .styler,
+    .login-shell.gr-group > .styler {{
+      --block-border-width: 0 !important;
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+      border: 0 !important;
+      border-width: 0 !important;
+      box-shadow: none !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+    }}
+
+    /* Gradio Block по умолчанию задаёт overflow: auto — убираем гориз. скроллбар у оболочки входа */
+    .block.login-shell,
+    .login-shell.block {{
+      overflow-x: clip !important;
+      overflow-y: visible !important;
+    }}
+
+    .login-shell.block,
+    .login-shell > .block {{
+      background: #FFFFFF !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }}
+
+    .login-shell > .form,
+    .login-shell .form {{
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      display: flex !important;
+      flex: 1 1 auto !important;
+      flex-direction: column !important;
+      gap: 0 !important;
+      margin: 0 !important;
+      min-height: 0 !important;
+      padding: 0 !important;
       width: 100% !important;
+    }}
+
+    .login-shell .form > div {{
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+    }}
+
+    /* Gradio: рамка .block вокруг gr.HTML с шапкой — убираем «серую коробку» */
+    .login-shell .block:has(.login-hero),
+    .login-shell .gr-html:has(.login-hero) {{
+      --block-border-width: 0 !important;
+      background: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+    }}
+
+    .login-hero {{
+      background:
+        radial-gradient(circle at 88% 18%, rgba(16,185,129,.14), transparent 22rem),
+        linear-gradient(135deg, #FFFFFF 0%, #EFF6FF 58%, #F8FAFC 100%) !important;
+      border: 0 !important;
+      border-bottom: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      box-sizing: border-box !important;
+      left: auto !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+      overflow: hidden !important;
+      flex-shrink: 0 !important;
+      padding: clamp(16px, 2.8vh, 30px) 24px clamp(18px, 3.2vh, 34px) !important;
+      position: relative !important;
+      transform: none !important;
+      width: 100% !important;
+    }}
+
+    .login-hero-inner {{
+      margin: 0 auto !important;
+      max-width: 1120px !important;
+      position: relative !important;
+      z-index: 1 !important;
     }}
 
     .login-hero::after {{
@@ -2118,11 +2423,18 @@ def build_css(settings=None):
     }}
 
     .login-grid {{
-      align-items: stretch !important;
+      align-items: center !important;
+      align-self: stretch !important;
+      background: #FFFFFF !important;
+      background-color: #FFFFFF !important;
+      display: flex !important;
+      flex: 1 1 auto !important;
       gap: var(--space-5) !important;
       justify-content: center !important;
       margin: 0 auto !important;
-      max-width: 420px !important;
+      max-width: none !important;
+      min-height: 0 !important;
+      padding: clamp(16px, 4vh, 40px) clamp(16px, 3vw, 28px) 24px !important;
       width: 100% !important;
     }}
 
@@ -2263,6 +2575,12 @@ def build_css(settings=None):
       padding: 10px 12px !important;
     }}
 
+    .login-field textarea {{
+      overflow: hidden !important;
+      overflow-y: hidden !important;
+      resize: none !important;
+    }}
+
     .login-submit button,
     .login-submit > button {{
       width: 100% !important;
@@ -2363,8 +2681,10 @@ def build_css(settings=None):
     }}
 
     .dashboard-shell {{
+      box-sizing: border-box !important;
+      margin: 0 auto !important;
       max-width: none !important;
-      margin: 0 !important;
+      padding: var(--space-4) clamp(16px, 3vw, 28px) var(--space-5) !important;
       width: 100% !important;
     }}
 
@@ -3470,9 +3790,12 @@ def build_css(settings=None):
       border: 0 !important;
       color: var(--color-muted) !important;
       display: flex !important;
+      flex-wrap: wrap !important;
       gap: var(--space-2) !important;
       justify-content: center !important;
       margin-top: 10px !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
       padding: 8px 0 0 !important;
       position: static !important;
       z-index: 0 !important;
@@ -3485,7 +3808,7 @@ def build_css(settings=None):
 
     @media (max-width: 1280px) {{
       .gradio-container {{
-        padding: 18px !important;
+        padding: 18px 0 12px !important;
       }}
 
       .actions-layout {{
@@ -3967,7 +4290,7 @@ def build_css(settings=None):
 
     @media (max-width: 1024px) {{
       .gradio-container {{
-        padding: var(--space-4) !important;
+        padding: var(--space-4) 0 12px !important;
       }}
 
       .login-shell {{
@@ -3976,11 +4299,12 @@ def build_css(settings=None):
       }}
 
       .login-hero {{
-        padding: 18px 22px !important;
+        margin-top: 0 !important;
+        padding: clamp(14px, 2.5vh, 26px) 22px clamp(16px, 2.8vh, 28px) !important;
       }}
 
       .login-hero h1 {{
-        font-size: 26px !important;
+        font-size: 24px !important;
       }}
 
       .login-access-list {{
@@ -3995,9 +4319,12 @@ def build_css(settings=None):
 
       .actions-layout,
       .dashboard-topbar,
-      .login-grid,
       .maintenance-actions {{
         flex-direction: column !important;
+      }}
+
+      .login-grid {{
+        flex-direction: row !important;
       }}
 
       .actions-layout > *,
@@ -4121,10 +4448,15 @@ def build_css(settings=None):
       }}
 
       .gradio-container {{
-        padding: var(--space-3) !important;
+        padding: var(--space-3) 0 12px !important;
       }}
 
-      .login-hero,
+      .login-hero {{
+        border-radius: 0 !important;
+        margin-top: 0 !important;
+        padding: clamp(12px, 2.2vh, 22px) 18px clamp(14px, 2.5vh, 24px) !important;
+      }}
+
       .login-card,
       .login-access-card,
       .login-status-card {{
@@ -4133,15 +4465,15 @@ def build_css(settings=None):
       }}
 
       .login-hero h1 {{
-        font-size: 26px !important;
+        font-size: 22px !important;
       }}
 
       .login-hero h2 {{
-        font-size: 18px !important;
+        font-size: 15px !important;
       }}
 
       .login-hero p {{
-        font-size: 13px !important;
+        font-size: 12px !important;
       }}
 
       .login-card-title {{
@@ -4319,12 +4651,14 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
     browser_user = browser_state_compat(None, storage_key="demos2sales_current_user")
     current_action_id = gr.State("")
 
-    with gr.Group(visible=True, elem_classes=["login-shell"]) as login_group:
+    with gr.Group(visible=True, elem_id="irbis-login-shell", elem_classes=["login-shell"]) as login_group:
         gr.HTML("""
         <section class="login-hero">
-          <h1>ИРБИСТЕХ</h1>
-          <h2>Демонстрации, продажи и премии</h2>
-          <p>Единое рабочее пространство для учета действий менеджеров, расчета смет демонстраций, продаж оборудования и подтверждения премий директором.</p>
+          <div class="login-hero-inner">
+            <h1>ИРБИСТЕХ</h1>
+            <h2>Демонстрации, продажи и премии</h2>
+            <p>Единое рабочее пространство для учета действий менеджеров, расчета смет демонстраций, продаж оборудования и подтверждения премий директором.</p>
+          </div>
         </section>
         """)
         with gr.Row(elem_classes=["login-grid"]):
@@ -4354,8 +4688,24 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                   </div>
                 </div>
                 """)
-                login_input = gr.Textbox(label="Логин", value="", placeholder="Например: artur", elem_classes=["login-field"])
-                password_input = gr.Textbox(label="Пароль", type="password", value="", placeholder="Введите пароль", elem_classes=["login-field"])
+                login_input = gr.Textbox(
+                    label="Логин",
+                    value="",
+                    placeholder="Например: artur",
+                    type="text",
+                    lines=1,
+                    max_lines=1,
+                    elem_classes=["login-field"],
+                )
+                password_input = gr.Textbox(
+                    label="Пароль",
+                    type="password",
+                    value="",
+                    placeholder="Введите пароль",
+                    lines=1,
+                    max_lines=1,
+                    elem_classes=["login-field"],
+                )
                 login_btn = gr.Button("Войти", variant="primary", elem_classes=["login-submit"])
                 login_error = gr.HTML("", elem_classes=["login-error-slot"])
 
@@ -4424,7 +4774,7 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                                 with gr.Row(elem_classes=["demo-key-fields"]):
                                     demo_client = gr.Textbox(label="Клиент", placeholder="Название компании или объекта", elem_classes=["demo-key-field"])
                                     demo_date = gr.Textbox(label="Дата", placeholder="ГГГГ-ММ-ДД", elem_classes=["demo-key-field"])
-                                    demo_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
+                                    demo_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, value=None, elem_classes=["demo-key-field"])
                                 with gr.Row(elem_classes=["demo-meta-fields"]):
                                     demo_city = gr.Textbox(label="Город", placeholder="Город демонстрации")
                                     demo_model = gr.Textbox(label="Модель", placeholder="Например: TRANSFORMER 2.0 MAX")
@@ -4528,14 +4878,14 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                                 gr.HTML("<div class='form-help-strip'>Сначала заполните дату и клиента, затем добавьте товары из справочника ниже.</div>")
                                 with gr.Row(elem_classes=["demo-key-fields"]):
                                     sale_date = gr.Textbox(label="Дата", placeholder="ГГГГ-ММ-ДД", elem_classes=["demo-key-field"])
-                                    sale_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
+                                    sale_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, value=None, elem_classes=["demo-key-field"])
                                     sale_client = gr.Textbox(label="Клиент", placeholder="Покупатель или объект", elem_classes=["demo-key-field"])
                                 sale_comment = gr.Textbox(label="Комментарий", lines=2, placeholder="Условия сделки, счет, договоренность")
                             with gr.Group(elem_classes=["demo-section", "sale-product-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Поиск товара</div><p>Введите минимум 3 символа, выберите подходящий товар из справочника и он добавится в таблицу продажи.</p></div><span class='demo-section-badge'>Справочник</span></div>")
                                 with gr.Row(elem_classes=["sale-search-row"]):
                                     sale_product_search = gr.Textbox(label="Поиск товара", placeholder="Минимум 3 символа: модель, артикул или название", elem_classes=["sale-search-field"])
-                                    sale_product_select = gr.Dropdown(label="Подходящие товары", choices=[], elem_classes=["sale-select-field"])
+                                    sale_product_select = gr.Dropdown(label="Подходящие товары", choices=[], value=None, elem_classes=["sale-select-field"])
                                 gr.HTML("<div class='table-note'>После выбора товара проверьте количество и цену в таблице. Широкая таблица прокручивается горизонтально.</div>")
                                 sale_rows_df = dataframe_compat(headers=SALE_COLUMNS, value=blank_df(SALE_COLUMNS), row_count=(1,"dynamic"), col_count=(13,"fixed"), interactive=True, label="Товары продажи")
                             with gr.Group(elem_classes=["demo-section", "sale-kpi-section"]):
@@ -4563,7 +4913,7 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
                                 gr.HTML("<div class='form-help-strip'>Премия закрывает период по выбранному менеджеру. Перед сохранением проверьте состав продаж и демонстраций ниже.</div>")
                                 with gr.Row(elem_classes=["demo-key-fields"]):
                                     premium_date = gr.Textbox(label="Дата", placeholder="ГГГГ-ММ-ДД", elem_classes=["demo-key-field"])
-                                    premium_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, elem_classes=["demo-key-field"])
+                                    premium_manager = gr.Dropdown(label="Менеджер", choices=MANAGER_CHOICES, value=None, elem_classes=["demo-key-field"])
                                 premium_comment = gr.Textbox(label="Комментарий", lines=2, placeholder="Комментарий к закрытию периода")
                             with gr.Group(elem_classes=["demo-section", "premium-kpi-section"]):
                                 gr.HTML("<div class='demo-section-head'><div><div class='demo-section-title'>Финансовый итог</div><p>Сводка продаж, демо-вычетов и суммы к выплате.</p></div><span class='premium-close-badge'>Закрытие периода</span></div>")
@@ -4709,4 +5059,9 @@ with gr.Blocks(**BLOCKS_KWARGS) as app:
 
 
 if __name__ == "__main__":
-    app.launch(**LAUNCH_KWARGS)
+    try:
+        app.launch(**LAUNCH_KWARGS)
+    except KeyboardInterrupt:
+        # Gradio при Ctrl+C печатает сообщение и закрывает сервер; второй KeyboardInterrupt
+        # иногда возникает в thread.join() внутри server.close() — это штатная остановка, не ошибка приложения.
+        raise SystemExit(0) from None
