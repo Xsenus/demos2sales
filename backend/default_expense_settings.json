@@ -1,0 +1,189 @@
+[
+  {
+    "article": "Работа водителя",
+    "unit": "км",
+    "qty_default": 1800,
+    "price_net_default": 15,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красная цена из настроек, синее количество у менеджера"
+  },
+  {
+    "article": "Работа демонстратора",
+    "unit": "часы",
+    "qty_default": 16,
+    "price_net_default": 1350,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красная цена из настроек"
+  },
+  {
+    "article": "Демонстрация криобластера",
+    "unit": "усл",
+    "qty_default": 5,
+    "price_net_default": 4000,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красная цена из настроек"
+  },
+  {
+    "article": "Усложненные условия труда",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 1700,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красная цена из настроек"
+  },
+  {
+    "article": "Ручная работа с кабелем и шланга компрессора",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 3500,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красная цена из настроек"
+  },
+  {
+    "article": "Использование электрокатушки",
+    "unit": "усл",
+    "qty_default": 1,
+    "price_net_default": 1500,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Синее поле, менеджер может менять количество и цену"
+  },
+  {
+    "article": "Выгрузка и загрузка компрессора и электрокатушки",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 1500,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Синее поле"
+  },
+  {
+    "article": "Налоги на ФОТ",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 0,
+    "price_vat_default": 0,
+    "qty_manager": false,
+    "price_manager": false,
+    "calc_type": "payroll_tax",
+    "comment": "Формула: 30% от строк ФОТ и демонстратора"
+  },
+  {
+    "article": "Расходы на отель Менеджера",
+    "unit": "день х чел",
+    "qty_default": 3,
+    "price_net_default": 2800,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Синее поле"
+  },
+  {
+    "article": "Расходы на отель Водителя",
+    "unit": "день х чел",
+    "qty_default": 3,
+    "price_net_default": 2800,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Синее поле"
+  },
+  {
+    "article": "Расходы на переезд менеджера",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 3000,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Синее поле"
+  },
+  {
+    "article": "Расходы на платную дорогу",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 0,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Пользовательское значение"
+  },
+  {
+    "article": "Суточные для командировки",
+    "unit": "день х чел",
+    "qty_default": 6,
+    "price_net_default": 1500,
+    "price_vat_default": null,
+    "qty_manager": false,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красное/формульное поле"
+  },
+  {
+    "article": "Расходы на дизель (12 л/100км), л",
+    "unit": "литры",
+    "qty_default": 0,
+    "price_net_default": 0,
+    "price_vat_default": 78,
+    "qty_manager": false,
+    "price_manager": false,
+    "calc_type": "diesel",
+    "comment": "Формула: км / 100 × 12 × цена топлива"
+  },
+  {
+    "article": "Амортизация Газели",
+    "unit": "км",
+    "qty_default": 0,
+    "price_net_default": 0,
+    "price_vat_default": 10,
+    "qty_manager": false,
+    "price_manager": false,
+    "calc_type": "gazelle_amort",
+    "comment": "Формула: км × ставка амортизации"
+  },
+  {
+    "article": "Расходы на закупку сухого льда",
+    "unit": "кг",
+    "qty_default": 300,
+    "price_net_default": 0,
+    "price_vat_default": 90,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct_vat_price",
+    "comment": "Синее поле"
+  },
+  {
+    "article": "Расходы на доставку сухого льда в цех",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 1500,
+    "price_vat_default": null,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "direct",
+    "comment": "Красная цена из настроек"
+  }
+]

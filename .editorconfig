@@ -1,11 +1,14 @@
 root = true
 
-[*.{py,md,txt,sh,yml,yaml,service,sql,json,toml,ini,cfg,html,css,js}]
+[*.{py,md,txt,sh,yml,yaml,service,sql,json,toml,ini,cfg,conf,html,css,js,jsx}]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 indent_style = space
 indent_size = 4
+
+[*.{js,jsx,json,html,css}]
+indent_size = 2
 
 [.gitignore]
 charset = utf-8
@@ -18,11 +21,6 @@ end_of_line = lf
 insert_final_newline = true
 
 [.editorconfig]
-charset = utf-8
-end_of_line = lf
-insert_final_newline = true
-
-[requirements.txt]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true

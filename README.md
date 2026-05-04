@@ -1,82 +1,86 @@
 # demos2sales
 
-Система учета демонстраций и продаж. Приложение построено на `Gradio`, хранит данные в `PostgreSQL` и помогает вести действия менеджеров, считать смету демонстрации, премии и продажи.
+React + FastAPI версия системы учета демонстраций, продаж и премий ИРБИСТЕХ.
 
-## Что делает проект
+## Структура
 
-- ведет журнал действий: демонстрации, продажи, выплаты премий;
-- считает смету демонстрации и вычет из премии;
-- считает премию по продаже;
-- хранит данные в PostgreSQL;
-- поддерживает экспорт рабочих данных.
-
-## Стек
-
-- Python
-- Gradio
-- pandas
-- PostgreSQL
-
-## Основные файлы
-
-- `serve.py` — точка входа для запуска приложения;
-- `irbistech_demo_sales_premiums_colab_v6_5_sql(1).py` — основная бизнес-логика;
-- `demo_calculator_widget.py` — встроенный калькулятор сметы демонстрации;
-- `.env.example` — пример конфигурации;
-- `requirements.txt` — зависимости Python;
-- `.github/workflows/deploy.yml` — workflow автодеплоя.
+- `backend/` — FastAPI API, бизнес-логика расчетов и работа с PostgreSQL.
+- `frontend/` — React UI на Vite.
+- `db/` — SQL-скрипты для базы `demo_calc`.
+- `deploy/` — systemd, nginx и скрипты публикации на VPS.
 
 ## Локальный запуск
 
+Backend:
+
 ```bash
+cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-python serve.py
+export DEMO_CALC_DB_PASSWORD=ВАШ_ПАРОЛЬ
+uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Перед запуском заполните `.env` параметрами подключения к PostgreSQL.
-
-По умолчанию приложение поднимается на `127.0.0.1:7860`.
-
-## Конфигурация
-
-Основные настройки задаются через `.env`:
-
-- подключение к PostgreSQL;
-- каталоги для рабочих данных и экспортов;
-- параметры запуска Gradio;
-- флаги использования PostgreSQL и автоматического заполнения пустой базы.
-
-См. пример в `.env.example`.
-
-## Проверка перед публикацией
+Frontend:
 
 ```bash
-python -m py_compile "irbistech_demo_sales_premiums_colab_v6_5_sql(1).py" demo_calculator_widget.py serve.py
+cd frontend
+npm ci
+npm run dev
+```
+
+В dev-режиме Vite проксирует `/api` на `http://127.0.0.1:8000`. В production frontend работает с same-origin `/api` через nginx.
+
+## Переменные окружения
+
+Основной пример находится в `.env.example` и `backend/.env.example`.
+
+В production на VPS файл должен лежать здесь:
+
+```bash
+/opt/demos2sales/shared/.env
+```
+
+Минимально нужны:
+
+```bash
+DEMO_CALC_DB_HOST=127.0.0.1
+DEMO_CALC_DB_PORT=5464
+DEMO_CALC_DB_NAME=demo_calc
+DEMO_CALC_DB_USER=admin
+DEMO_CALC_DB_PASSWORD=...
+DEMO_CALC_AUTO_SEED_EMPTY_DB=0
+DEMO_CALC_JSON_BACKUP_PATH=/opt/demos2sales/shared/data/state_backup.json
+```
+
+## Проверки
+
+```bash
+python -m py_compile backend/main.py
+cd frontend
+npm ci
+npm run build
 ```
 
 ## Деплой
 
-Основная схема деплоя работает через GitHub Actions:
+GitHub Actions workflow `.github/workflows/deploy.yml` собирает frontend, проверяет backend, отправляет архив на VPS и запускает `deploy/remote_deploy.sh`.
 
-1. Изменения попадают в `main`.
-2. Workflow проверяет Python-файлы.
-3. GitHub Actions собирает архив приложения.
-4. На сервер выкатывается новый релиз.
-5. Сервис перезапускается с новой версией кода.
+Скрипт `deploy/deploy_from_checkout.sh` на сервере:
 
-Таким образом, обычная публикация выглядит так:
+- создает backend venv;
+- устанавливает Python-зависимости;
+- выполняет `npm ci` и `npm run build`;
+- ставит `demos2sales.service`;
+- обновляет nginx config `demos2sales.irbistech.com`;
+- перезапускает только `demos2sales.service`;
+- проверяет `/api/health`;
+- делает pre-deploy backup в `/opt/demos2sales/backups`.
 
-```bash
-git add .
-git commit -m "Краткое описание изменений"
-git push origin main
-```
+Текущая production-схема:
 
-## Важно
-
-- `.env` не хранится в git;
-- рабочие данные и экспорты не должны коммититься в репозиторий;
-- SQL-скрипты пересоздания и заполнения базы подходят для развертывания с нуля, но не для рабочей production-базы.
+- React static: `/opt/demos2sales/current/frontend/dist`;
+- FastAPI: `127.0.0.1:7861`;
+- public domain: `https://demos2sales.irbistech.com`;
+- API route: `https://demos2sales.irbistech.com/api/...`.

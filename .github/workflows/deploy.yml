@@ -31,14 +31,24 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies for validation
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
+          python -m py_compile backend/main.py
 
-      - name: Validate Python files
+      - name: Validate frontend
+        working-directory: frontend
         run: |
-          python -m py_compile "irbistech_demo_sales_premiums_colab_v6_5_sql(1).py" demo_calculator_widget.py serve.py
+          npm ci
+          npm run build
 
       - name: Build release archive
         run: |
@@ -46,12 +56,14 @@ jobs:
           tar \
             --exclude-vcs \
             --exclude='.github' \
-            --exclude='.venv' \
-            --exclude='__pycache__' \
-            --exclude='*.pyc' \
+            --exclude='backend/.venv' \
+            --exclude='backend/__pycache__' \
+            --exclude='frontend/node_modules' \
+            --exclude='frontend/dist' \
             --exclude='.env' \
             --exclude='data' \
             --exclude='logs' \
+            --exclude='*.pyc' \
             -czf "${ARCHIVE_PATH}" .
           echo "RELEASE_ARCHIVE=${ARCHIVE_PATH}" >> "$GITHUB_ENV"
 

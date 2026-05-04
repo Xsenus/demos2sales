@@ -19,7 +19,7 @@ flock -n 9 || {
   exit 1
 }
 
-while read -r oldrev newrev refname; do
+while read -r _oldrev newrev refname; do
   if [[ "${refname}" != "refs/heads/main" ]]; then
     continue
   fi

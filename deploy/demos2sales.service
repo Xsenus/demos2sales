@@ -1,5 +1,5 @@
 [Unit]
-Description=Demos2Sales Gradio app
+Description=Demos2Sales React + FastAPI app
 After=network.target postgresql.service
 Wants=postgresql.service
 
@@ -7,9 +7,16 @@ Wants=postgresql.service
 Type=simple
 User=www-data
 Group=www-data
-WorkingDirectory=/opt/demos2sales/current
+WorkingDirectory=/opt/demos2sales/current/backend
 EnvironmentFile=/opt/demos2sales/shared/.env
-ExecStart=/opt/demos2sales/current/.venv/bin/python /opt/demos2sales/current/serve.py
+Environment=DEMO_CALC_DB_HOST=127.0.0.1
+Environment=DEMO_CALC_DB_PORT=5464
+Environment=DEMO_CALC_DB_NAME=demo_calc
+Environment=DEMO_CALC_DB_USER=admin
+Environment=DEMO_CALC_AUTO_SEED_EMPTY_DB=0
+Environment=DEMO_CALC_JSON_BACKUP_PATH=/opt/demos2sales/shared/data/state_backup.json
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/demos2sales/current/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 7861
 Restart=always
 RestartSec=3
 NoNewPrivileges=true

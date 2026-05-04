@@ -1,0 +1,52 @@
+[
+  {
+    "product_id": "MINI-3.0-P10-F2500",
+    "sku": "MINI-3.0-P10-F2500",
+    "name": "Криобластер MINI 3.0 (P10), 30 кг/ч, 2500 л/мин, MINI-II",
+    "price_vat": 203740,
+    "price_net": 167000,
+    "min_price_net": 130000,
+    "margin_pct": 0.65,
+    "comment": "Демо-товар"
+  },
+  {
+    "product_id": "BASIC-2.0-P10-PLa-F3500",
+    "sku": "BASIC-2.0-P10-PLa-F3500",
+    "name": "Криобластер BASIC 2.0 (P10/PLa), 0-60 кг/ч, 3500 л/мин",
+    "price_vat": 1169980,
+    "price_net": 959000,
+    "min_price_net": 780000,
+    "margin_pct": 0.65,
+    "comment": "Демо-товар"
+  },
+  {
+    "product_id": "ONE-2.0-P12-PLa-F3500",
+    "sku": "ONE-2.0-P12-PLa-F3500",
+    "name": "Криобластер ONE 2.0 (P12/PLa), 0-150 кг/ч, 3500 л/мин",
+    "price_vat": 1886120,
+    "price_net": 1546000,
+    "min_price_net": 1250000,
+    "margin_pct": 0.65,
+    "comment": "Демо-товар"
+  },
+  {
+    "product_id": "TR-2.0-MAX-P12-PLa-F3500-PRO-II",
+    "sku": "TR-2.0-MAX-P12-PLa-F3500-PRO-II",
+    "name": "Криобластер TRANSFORMER 2.0 MAX (P12/PLa), 0-150 кг/ч, 3500 л/мин",
+    "price_vat": 2166720,
+    "price_net": 1776000,
+    "min_price_net": 1430000,
+    "margin_pct": 0.65,
+    "comment": "Демо-товар"
+  },
+  {
+    "product_id": "NZ-LV-5000",
+    "sku": "NZ-LV-5000",
+    "name": "Сопло агрессивное NZ-LV-5000",
+    "price_vat": 92720,
+    "price_net": 76000,
+    "min_price_net": 55000,
+    "margin_pct": 0.65,
+    "comment": "Демо-товар"
+  }
+]
