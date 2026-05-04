@@ -9,6 +9,20 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const money = (v) => `${Number(v || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 const money0 = (v) => `${Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
 const percent = (v) => `${(Number(v || 0) * 100).toFixed(1)}%`;
+const pctUi = (v) => {
+  const n = Number(v || 0);
+  return Number.isFinite(n) ? Number((n * 100).toFixed(2)) : 0;
+};
+const fromPctUi = (v) => {
+  const s = String(v ?? "").replace(",", ".");
+  const n = Number(s);
+  return Number.isFinite(n) ? n / 100 : 0;
+};
+const plainNum = (v) => {
+  const s = String(v ?? "").replace(",", ".");
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+};
 
 function useNotice() {
   const [notice, setNotice] = useState({ type: "", text: "" });
@@ -107,6 +121,47 @@ function App() {
     }, 200);
     return () => clearTimeout(h);
   }, [productSearch, user, detailKind]);
+
+  useEffect(() => {
+    if (!user || !editor?.id || !detailKind || !["demo", "sale"].includes(detailKind)) return undefined;
+
+    let payload = null;
+    if (detailKind === "demo") {
+      payload = {
+        date: editor.date,
+        client: editor.client,
+        city: editor.city,
+        model: editor.model,
+        task_description: editor.task_description,
+        comment: editor.comment,
+        expenses: editor.expenses || [],
+        criteria: editor.criteria || {},
+      };
+    }
+    if (detailKind === "sale") {
+      payload = {
+        date: editor.date,
+        client: editor.client,
+        comment: editor.comment,
+        rows: editor.rows || [],
+      };
+    }
+    if (!payload) return undefined;
+
+    let cancelled = false;
+    const h = setTimeout(() => {
+      api.previewAction(user.login, editor.id, payload)
+        .then((res) => {
+          if (!cancelled) setDetail(res);
+        })
+        .catch(() => {});
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(h);
+    };
+  }, [editor, user, detailKind]);
 
   const onLogin = async (e) => {
     e.preventDefault();
@@ -325,7 +380,7 @@ function App() {
         <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>Действия</TabButton>
         <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}>Настройки</TabButton>
         <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}>Товары</TabButton>
-        <button className="ghost" onClick={() => loadBootstrap()}>Обновить</button>
+        <button className="ghost" onClick={() => loadBootstrap()}>Обновить из БД</button>
       </div>
 
       {notice.text ? <Notice notice={notice} /> : null}
@@ -684,17 +739,54 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
 
   return (
     <div className="stack-gap">
-      <div className="card fields-grid four">
-        <input type="number" value={settings.vat_rate} disabled={!isDirector} onChange={(e) => setField("vat_rate", e.target.value)} placeholder="НДС" />
-        <input type="number" value={settings.bonus_rate} disabled={!isDirector} onChange={(e) => setField("bonus_rate", e.target.value)} placeholder="Ставка премии" />
-        <input type="number" value={settings.max_demo_deduction_pct} disabled={!isDirector} onChange={(e) => setField("max_demo_deduction_pct", e.target.value)} placeholder="Лимит вычета" />
-        <input type="number" value={settings.company_support_vat} disabled={!isDirector} onChange={(e) => setField("company_support_vat", e.target.value)} placeholder="Фора / помощь ООО" />
+      <div className="card">
+        <div className="card-head compact-row">
+          <h3>Бизнес-настройки</h3>
+          {isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}
+        </div>
+        <div className="fields-grid two">
+          <label className="field-stack">
+            <span>НДС, %</span>
+            <input type="number" value={pctUi(settings.vat_rate)} disabled={!isDirector} onChange={(e) => setField("vat_rate", fromPctUi(e.target.value))} />
+          </label>
+          <label className="field-stack">
+            <span>Ставка премии, %</span>
+            <input type="number" value={pctUi(settings.bonus_rate)} disabled={!isDirector} onChange={(e) => setField("bonus_rate", fromPctUi(e.target.value))} />
+          </label>
+          <label className="field-stack">
+            <span>Максимальный вычет из премии, %</span>
+            <input type="number" value={pctUi(settings.max_demo_deduction_pct)} disabled={!isDirector} onChange={(e) => setField("max_demo_deduction_pct", fromPctUi(e.target.value))} />
+          </label>
+          <label className="field-stack">
+            <span>Фора / помощь ООО, руб. с НДС</span>
+            <input type="number" value={settings.company_support_vat} disabled={!isDirector} onChange={(e) => setField("company_support_vat", plainNum(e.target.value))} />
+          </label>
+        </div>
       </div>
-      <div className="card fields-grid four">
-        <input type="number" value={settings.ui.action_list_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.action_list_width_pct", e.target.value)} placeholder="Ширина списка действий" />
-        <input type="number" value={settings.ui.criteria_name_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_name_width_pct", e.target.value)} placeholder="Ширина названия критерия" />
-        <input type="number" value={settings.ui.criteria_levels_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_levels_width_pct", e.target.value)} placeholder="Ширина уровней" />
-        <input type="number" value={settings.ui.criteria_comment_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_comment_width_pct", e.target.value)} placeholder="Ширина комментария" />
+
+      <div className="card">
+        <div className="card-head compact-row">
+          <h3>Настройки интерфейса</h3>
+          {isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}
+        </div>
+        <div className="fields-grid two">
+          <label className="field-stack">
+            <span>Ширина списка действий, %</span>
+            <input type="number" value={settings.ui.action_list_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.action_list_width_pct", plainNum(e.target.value))} />
+          </label>
+          <label className="field-stack">
+            <span>Ширина колонки "Критерий", %</span>
+            <input type="number" value={settings.ui.criteria_name_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_name_width_pct", plainNum(e.target.value))} />
+          </label>
+          <label className="field-stack">
+            <span>Ширина колонки "Уровни", %</span>
+            <input type="number" value={settings.ui.criteria_levels_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_levels_width_pct", plainNum(e.target.value))} />
+          </label>
+          <label className="field-stack">
+            <span>Ширина колонки "Комментарий", %</span>
+            <input type="number" value={settings.ui.criteria_comment_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_comment_width_pct", plainNum(e.target.value))} />
+          </label>
+        </div>
       </div>
       <div className="card">
         <div className="card-head compact-row"><h3>Критерии и баллы</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
@@ -767,7 +859,7 @@ function ProductsView({ user, products, setProducts, saveProducts, importProduct
           <div className="mini-actions">
             <a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать шаблон</a>
             {isDirector && <label className="ghost file-btn">Импорт <input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}
-            {isDirector && <button className="ghost" onClick={addRow}>+ Строка</button>}
+            {isDirector && <button className="ghost" onClick={addRow}>+ Товар</button>}
             {isDirector && <button className="primary" onClick={saveProducts}>Сохранить</button>}
           </div>
         </div>

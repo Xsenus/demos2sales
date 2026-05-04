@@ -78,8 +78,11 @@ button { border: 0; cursor: pointer; }
 .checkbox-row { display:flex; gap:10px; align-items:center; font-weight: 700; }
 .confirm-grid { display:grid; gap: 8px; grid-template-columns: 1fr 2fr; }
 .fields-grid { display:grid; gap: 8px; }
+.fields-grid.two { grid-template-columns: repeat(2, 1fr); }
 .fields-grid.three { grid-template-columns: repeat(3, 1fr); }
 .fields-grid.four { grid-template-columns: repeat(4, 1fr); }
+.field-stack { display: grid; gap: 6px; align-content: start; }
+.field-stack > span { color: #111827; font-weight: 700; font-size: 12px; }
 .span-3 { grid-column: span 3; }
 .span-4 { grid-column: span 4; }
 
@@ -137,7 +140,7 @@ button { border: 0; cursor: pointer; }
 @media (max-width: 980px) {
   .actions-layout { grid-template-columns: 1fr; }
   .compact-kpi { grid-template-columns: repeat(2, 1fr); }
-  .fields-grid.three, .fields-grid.four, .confirm-grid { grid-template-columns: 1fr; }
+  .fields-grid.two, .fields-grid.three, .fields-grid.four, .confirm-grid { grid-template-columns: 1fr; }
   .span-3, .span-4 { grid-column: span 1; }
   .criteria-grid-head, .criterion-row { grid-template-columns: 1fr; }
 }

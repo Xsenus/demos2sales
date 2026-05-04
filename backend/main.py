@@ -6,6 +6,7 @@ import traceback
 import uuid
 from copy import deepcopy
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -215,8 +216,10 @@ def money0(value: Any) -> str:
 def clean_json(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {str(k): clean_json(v) for k, v in obj.items()}
-    if isinstance(obj, list):
+    if isinstance(obj, (list, tuple)):
         return [clean_json(v) for v in obj]
+    if isinstance(obj, Decimal):
+        return float(obj)
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
     try:
@@ -765,7 +768,7 @@ def load_state_from_db():
                 }
                 if action["type"] == ACTION_DEMO:
                     cur.execute("SELECT * FROM demo_expenses WHERE action_id=%s ORDER BY row_order", (action["id"],))
-                    action["expenses"] = [dict(r) for r in cur.fetchall()]
+                    action["expenses"] = [clean_json(dict(r)) for r in cur.fetchall()]
                     cur.execute("SELECT * FROM demo_criterion_values WHERE action_id=%s", (action["id"],))
                     criteria = {}
                     for r in cur.fetchall():
@@ -773,7 +776,7 @@ def load_state_from_db():
                     action["criteria"] = criteria
                 elif action["type"] == ACTION_SALE:
                     cur.execute("SELECT * FROM sale_rows WHERE action_id=%s ORDER BY row_order", (action["id"],))
-                    action["rows"] = [dict(r) for r in cur.fetchall()]
+                    action["rows"] = [clean_json(dict(r)) for r in cur.fetchall()]
                 actions.append(action)
         conn.close()
         return {"settings": settings, "products": products, "actions": actions}, "OK"
@@ -942,19 +945,20 @@ def delete_action(state: Dict[str, Any], user: Dict[str, Any], action_id: str) -
 
 def sync_action_after_edit(action: Dict[str, Any], state: Dict[str, Any]):
     settings = state["settings"]
+    auto_update_confirmed = not bool(action.get("is_director_confirmed")) or action.get("confirmed_amount") is None
     if action["type"] == ACTION_DEMO:
         action["expenses"] = calc_expenses_rows(action.get("expenses", []), settings)
         calc = calculate_demo(action, settings)
-        if action.get("confirmed_amount") is None:
+        if auto_update_confirmed:
             action["confirmed_amount"] = calc["deduction_net"]
     elif action["type"] == ACTION_SALE:
         action["rows"] = sale_rows_to_records(action.get("rows", []), state["products"], settings)
         calc = calculate_sale(action, state["products"], settings)
-        if action.get("confirmed_amount") is None:
+        if auto_update_confirmed:
             action["confirmed_amount"] = calc["bonus_net"]
     elif action["type"] == ACTION_PREMIUM:
         calc = calculate_premium(action, state, settings)
-        if action.get("confirmed_amount") is None:
+        if auto_update_confirmed:
             action["confirmed_amount"] = calc["payout"]
 
 
@@ -1026,12 +1030,12 @@ def serialize_action_detail(action: Dict[str, Any], state: Dict[str, Any]) -> Di
     base["is_locked"] = is_action_locked(action, state)
     if action["type"] == ACTION_DEMO:
         calc = calculate_demo(action, settings)
-        return {"action": base, "kind": "demo", "calc": calc, "criteria_blocks": serialize_criteria_blocks(action, settings)}
+        return clean_json({"action": base, "kind": "demo", "calc": calc, "criteria_blocks": serialize_criteria_blocks(action, settings)})
     if action["type"] == ACTION_SALE:
         calc = calculate_sale(action, state["products"], settings)
-        return {"action": base, "kind": "sale", "calc": calc}
+        return clean_json({"action": base, "kind": "sale", "calc": calc})
     calc = calculate_premium(action, state, settings)
-    return {"action": base, "kind": "premium", "calc": calc}
+    return clean_json({"action": base, "kind": "premium", "calc": calc})
 
 
 # ==============================
@@ -1091,7 +1095,7 @@ app.add_middleware(
 @app.get("/api/health")
 def api_health():
     state, msg = load_state_from_db()
-    return {"ok": True, "db_message": msg, "actions": len(state.get("actions", []))}
+    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", []))})
 
 
 @app.post("/api/auth/login")
@@ -1099,26 +1103,26 @@ def api_login(payload: LoginIn):
     user = authenticate(payload.login, payload.password)
     if not user:
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    return {"user": user}
+    return clean_json({"user": user})
 
 
 @app.get("/api/bootstrap")
 def api_bootstrap(user: Dict[str, Any] = Depends(get_user_from_header), manager_filter: str = Query("__all__")):
     state, msg = load_state_from_db()
-    return {
+    return clean_json({
         "user": user,
         "db_message": msg,
         "settings": state["settings"],
         "manager_choices": [{"value": "__all__", "label": "Все менеджеры"}] + [{"value": m, "label": USERS[m]["name"]} for m in MANAGER_LOGINS],
         "actions": visible_actions(user, state, manager_filter),
         "products_count": len(state.get("products", [])),
-    }
+    })
 
 
 @app.get("/api/actions")
 def api_actions(user: Dict[str, Any] = Depends(get_user_from_header), manager_filter: str = Query("__all__")):
     state, _ = load_state_from_db()
-    return {"items": visible_actions(user, state, manager_filter)}
+    return clean_json({"items": visible_actions(user, state, manager_filter)})
 
 
 @app.get("/api/actions/{action_id}")
@@ -1132,13 +1136,21 @@ def api_action_detail(action_id: str, user: Dict[str, Any] = Depends(get_user_fr
     return serialize_action_detail(action, state)
 
 
+@app.post("/api/actions/{action_id}/preview")
+def api_action_preview(action_id: str, body: ActionPatchIn, user: Dict[str, Any] = Depends(get_user_from_header)):
+    state, _ = load_state_from_db()
+    preview_state = deepcopy(state)
+    action = update_action(preview_state, user, action_id, body.payload)
+    return serialize_action_detail(action, preview_state)
+
+
 @app.post("/api/actions")
 def api_create_action(body: CreateActionIn, user: Dict[str, Any] = Depends(get_user_from_header)):
     state, _ = load_state_from_db()
     action = add_action(state, user, body.action_type, body.manager_login)
     sync_action_after_edit(action, state)
     persist_state_to_db(state)
-    return {"action": serialize_action_detail(action, state), "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])}
+    return clean_json({"action": serialize_action_detail(action, state), "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])})
 
 
 @app.patch("/api/actions/{action_id}")
@@ -1146,7 +1158,7 @@ def api_update_action(action_id: str, body: ActionPatchIn, user: Dict[str, Any] 
     state, _ = load_state_from_db()
     action = update_action(state, user, action_id, body.payload)
     persist_state_to_db(state)
-    return {"action": serialize_action_detail(action, state), "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])}
+    return clean_json({"action": serialize_action_detail(action, state), "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])})
 
 
 @app.delete("/api/actions/{action_id}")
@@ -1154,7 +1166,7 @@ def api_delete_action(action_id: str, user: Dict[str, Any] = Depends(get_user_fr
     state, _ = load_state_from_db()
     delete_action(state, user, action_id)
     persist_state_to_db(state)
-    return {"ok": True, "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])}
+    return clean_json({"ok": True, "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])})
 
 
 @app.post("/api/actions/{action_id}/move")
@@ -1162,7 +1174,7 @@ def api_move_action(action_id: str, body: MoveIn, user: Dict[str, Any] = Depends
     state, _ = load_state_from_db()
     move_action(state, user, action_id, body.direction)
     persist_state_to_db(state)
-    return {"ok": True, "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])}
+    return clean_json({"ok": True, "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])})
 
 
 @app.post("/api/actions/{action_id}/sale-rows/add-product")
@@ -1260,13 +1272,13 @@ def api_demo_expense_command(action_id: str, body: DemoExpenseCommandIn, user: D
 @app.get("/api/products")
 def api_products(user: Dict[str, Any] = Depends(get_user_from_header)):
     state, _ = load_state_from_db()
-    return {"items": [normalize_product(p, state["settings"]) for p in state.get("products", [])]}
+    return clean_json({"items": [normalize_product(p, state["settings"]) for p in state.get("products", [])]})
 
 
 @app.get("/api/products/search")
 def api_products_search(q: str = Query(""), user: Dict[str, Any] = Depends(get_user_from_header)):
     state, _ = load_state_from_db()
-    return {"items": search_products(q, state.get("products", []))}
+    return clean_json({"items": search_products(q, state.get("products", []))})
 
 
 @app.put("/api/products")
@@ -1275,7 +1287,7 @@ def api_products_save(body: ProductsBulkIn, user: Dict[str, Any] = Depends(get_u
     state, _ = load_state_from_db()
     state["products"] = [normalize_product(p, state["settings"]) for p in body.products]
     persist_state_to_db(state)
-    return {"items": state["products"]}
+    return clean_json({"items": state["products"]})
 
 
 @app.get("/api/products/template")
@@ -1304,13 +1316,13 @@ def api_products_import(file: UploadFile = File(...), user: Dict[str, Any] = Dep
     state, _ = load_state_from_db()
     state["products"] = products
     persist_state_to_db(state)
-    return {"items": products, "count": len(products)}
+    return clean_json({"items": products, "count": len(products)})
 
 
 @app.get("/api/settings")
 def api_settings(user: Dict[str, Any] = Depends(get_user_from_header)):
     state, _ = load_state_from_db()
-    return {"settings": state["settings"]}
+    return clean_json({"settings": state["settings"]})
 
 
 @app.put("/api/settings")
@@ -1319,7 +1331,7 @@ def api_settings_save(body: SettingsIn, user: Dict[str, Any] = Depends(get_user_
     state, _ = load_state_from_db()
     state["settings"] = merge_settings(body.settings)
     persist_state_to_db(state)
-    return {"settings": state["settings"]}
+    return clean_json({"settings": state["settings"]})
 
 
 @app.exception_handler(Exception)

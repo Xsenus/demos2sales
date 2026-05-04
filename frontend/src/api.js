@@ -29,6 +29,7 @@ export const api = {
   bootstrap: (userLogin, managerFilter = "__all__") => request(`/api/bootstrap?manager_filter=${encodeURIComponent(managerFilter)}`, { userLogin }),
   actions: (userLogin, managerFilter = "__all__") => request(`/api/actions?manager_filter=${encodeURIComponent(managerFilter)}`, { userLogin }),
   actionDetail: (userLogin, actionId) => request(`/api/actions/${actionId}`, { userLogin }),
+  previewAction: (userLogin, actionId, payload) => request(`/api/actions/${actionId}/preview`, { method: "POST", userLogin, body: { payload } }),
   createAction: (userLogin, actionType, managerLogin) => request("/api/actions", { method: "POST", userLogin, body: { action_type: actionType, manager_login: managerLogin } }),
   updateAction: (userLogin, actionId, payload) => request(`/api/actions/${actionId}`, { method: "PATCH", userLogin, body: { payload } }),
   moveAction: (userLogin, actionId, direction) => request(`/api/actions/${actionId}/move`, { method: "POST", userLogin, body: { direction } }),
