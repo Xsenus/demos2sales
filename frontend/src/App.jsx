@@ -338,6 +338,23 @@ function App() {
     ...prev,
     criteria: { ...(prev.criteria || {}), [code]: { ...(prev.criteria?.[code] || {}), ...patch } },
   }));
+  const logout = () => {
+    setUser(null);
+    setManagerChoices([]);
+    setManagerFilter("__all__");
+    setMainTab("actions");
+    setActions([]);
+    setSelectedActionId(null);
+    setDetail(null);
+    setEditor(null);
+    setSettings(null);
+    setProducts([]);
+    setProductSearch("");
+    setProductSuggestions([]);
+    setSelectedProductId("");
+    show("Вы вышли из системы", "info");
+  };
+  const userRoleLabel = user ? (user.role === "director" ? "Директор" : `Менеджер · ${user.office_city || ""}`) : "";
 
   if (!user) {
     return (
@@ -365,14 +382,26 @@ function App() {
   return (
     <div className="app" style={pageStyle}>
       <header className="header-bar">
-        <div>
+        <div className="header-brand">
           <div className="brand-title">ИРБИСТЕХ — демонстрации, продажи и премии</div>
           <div className="muted compact">Внутренняя система демонстраций, продаж и подтверждения премий</div>
         </div>
-        <div className="header-user">
-          <div>{user.name}</div>
-          <div className="muted compact">{user.role === "director" ? "Директор" : `Менеджер · ${user.office_city || ""}`}</div>
-        </div>
+        <details className="header-profile">
+          <summary className="profile-summary">
+            <span className="profile-copy">
+              <span className="profile-name">{user.name}</span>
+              <span className="profile-role">{userRoleLabel}</span>
+            </span>
+            <span className="profile-chevron">⌄</span>
+          </summary>
+          <div className="profile-menu">
+            <div className="profile-menu-info">
+              <div className="profile-menu-name">{user.name}</div>
+              <div className="profile-menu-role">{userRoleLabel}</div>
+            </div>
+            <button className="ghost profile-logout" onClick={logout}>Выйти</button>
+          </div>
+        </details>
       </header>
 
       <div className="top-tabs">
