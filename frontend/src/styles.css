@@ -123,6 +123,7 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 
 .kpi-grid { display:grid; gap:7px; }
 .compact-kpi, .six-kpi { grid-template-columns: repeat(6, 1fr); }
+.driver-summary-grid { grid-template-columns: repeat(4, 1fr); }
 .sale-kpi, .premium-kpi, .totals-card { grid-template-columns: repeat(3, 1fr); display: grid; gap: 7px; }
 .totals-card { grid-template-columns: repeat(2, 1fr); }
 .kpi-box { padding: 8px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--card-soft); min-height: 54px; text-align: center; display: grid; align-content: center; justify-items: center; }
@@ -137,7 +138,9 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 .dense-table th, .dense-table td { border-bottom: 1px solid #edf1f5; padding: 7px; vertical-align: middle; text-align: left; color: #000; }
 .dense-table th { position: sticky; top: 0; background: #f9fbfd; z-index: 1; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; }
 .dense-table td input, .dense-table td textarea { min-width: 76px; }
-.two-col-table { max-width: 620px; }
+.two-col-table { max-width: 860px; }
+.driver-settlement-table { max-width: 100%; }
+.expense-table th:nth-child(1), .expense-table td:nth-child(1) { min-width: 260px; }
 .align-right { text-align: right !important; }
 .readonly-cell { background: #f8fafc; }
 .row-title { font-weight: 700; }
@@ -187,7 +190,7 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 .sale-row-actions { flex-wrap: nowrap; justify-content: center; min-width: 82px; }
 
 @media (max-width: 1280px) {
-  .compact-kpi, .six-kpi { grid-template-columns: repeat(3, 1fr); }
+  .compact-kpi, .six-kpi, .driver-summary-grid { grid-template-columns: repeat(3, 1fr); }
   .compact-info-grid { grid-template-columns: repeat(3, 1fr); }
   .span-2, .span-3, .span-4 { grid-column: span 2; }
   .settings-row { grid-template-columns: 1fr; }
@@ -196,7 +199,7 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 @media (max-width: 980px) {
   .actions-layout { grid-template-columns: 1fr; }
   .panel-resizer { display: none; }
-  .compact-kpi, .six-kpi, .sale-kpi, .premium-kpi, .totals-card, .list-totals { grid-template-columns: 1fr; }
+  .compact-kpi, .six-kpi, .driver-summary-grid, .sale-kpi, .premium-kpi, .totals-card, .list-totals { grid-template-columns: 1fr; }
   .fields-grid.two, .fields-grid.three, .fields-grid.four, .compact-info-grid, .confirm-grid, .one-line-confirm, .demo-hours-row, .sale-info-grid { grid-template-columns: 1fr; }
   .span-2, .span-3, .span-4 { grid-column: span 1; }
   .criteria-grid-head, .criterion-row { grid-template-columns: 1fr; }

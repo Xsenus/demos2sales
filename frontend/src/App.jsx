@@ -24,6 +24,7 @@ const plainNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 const officeNames = (settings) => (settings?.office_cities || ["Казань", "Москва"]).map((x) => (typeof x === "string" ? x : x.name)).filter(Boolean);
+const expenseKey = (row, fallback = "") => String(row?.code || row?.row_code || `${row?.article || ""}::${row?.unit || ""}::${fallback}`);
 const clampActionListWidth = (value) => Math.min(46, Math.max(24, Number(value) || 31));
 const savedActionListWidth = () => {
   if (typeof window === "undefined") return null;
@@ -330,6 +331,7 @@ function App() {
     return { ...prev, rows };
   });
   const updateExpenseRow = (index, field, value) => setEditor((prev) => {
+    if (index < 0) return prev;
     const rows = clone(prev.expenses || []);
     rows[index] = { ...rows[index], [field]: value };
     return { ...prev, expenses: rows };
@@ -518,10 +520,12 @@ function App() {
 
 function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, updateDemoMeta, updateExpenseRow, updateCriterion, settings, user }) {
   const calc = detail.calc || {};
-  const expenseMap = useMemo(() => Object.fromEntries((settings?.expense_settings || []).map((row) => [row.article, row])), [settings]);
+  const expenseMap = useMemo(() => Object.fromEntries((settings?.expense_settings || []).map((row, index) => [expenseKey(row, index), row])), [settings]);
   const criteriaBlocks = detail.criteria_blocks || { P: [], R: [], M: [] };
+  const expenseRows = calc.expenses?.length ? calc.expenses : (editor.expenses || []);
+  const editorExpenseRows = editor.expenses || [];
   const readonly = !!editor.is_locked || (user.role !== "director" && !!editor.is_director_confirmed);
-  const demoHours = editor.demo_meta?.demo_hours ?? 8;
+  const demoHours = editor.demo_meta?.demo_hours ?? 2;
   return (
     <div className="stack-gap">
       <div className="card fields-grid compact-info-grid">
@@ -555,16 +559,16 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
         <div className="stack-gap">
           <ExpenseSection
             title="Часть 1. Статья расходов по совместителю водителю-демонстратору (ГПХ, ПНД)"
-            rows={(editor.expenses || []).filter((row) => row.section === "driver")}
-            allRows={editor.expenses || []}
+            rows={expenseRows.filter((row) => row.section === "driver")}
+            allRows={editorExpenseRows}
             expenseMap={expenseMap}
             updateExpenseRow={updateExpenseRow}
             readonly={readonly}
           />
           <ExpenseSection
             title="Часть 2. Другие статьи расходов ООО ИРБИСТЕХ"
-            rows={(editor.expenses || []).filter((row) => row.section !== "driver")}
-            allRows={editor.expenses || []}
+            rows={expenseRows.filter((row) => row.section !== "driver")}
+            allRows={editorExpenseRows}
             expenseMap={expenseMap}
             updateExpenseRow={updateExpenseRow}
             readonly={readonly}
@@ -601,19 +605,27 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
 
 function DriverSettlement({ calc }) {
   return (
-    <div className="card">
-      <h3>Расчеты с водителем</h3>
-      <table className="dense-table two-col-table">
-        <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
-        <tbody>
-          {(calc.driver_settlement || []).map((row) => (
-            <tr key={row.name}>
-              <td>{row.name}</td>
-              <td className="align-right strong">{typeof row.value === "number" ? `${row.value.toLocaleString("ru-RU")} ${row.unit || ""}` : row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="stack-gap">
+      <div className="kpi-grid driver-summary-grid">
+        {(calc.driver_settlement_summary || []).map((row) => (
+          <Kpi key={row.name} title={row.name} value={typeof row.value === "number" ? `${row.value.toLocaleString("ru-RU")} ${row.unit || ""}` : row.value} />
+        ))}
+      </div>
+      <div className="card">
+        <h3>Расчеты с водителем</h3>
+        <table className="dense-table two-col-table driver-settlement-table">
+          <thead><tr><th>Параметр</th><th>Значение</th><th>Формула / источник</th></tr></thead>
+          <tbody>
+            {(calc.driver_settlement || []).map((row) => (
+              <tr key={row.name}>
+                <td>{row.name}</td>
+                <td className="align-right strong">{typeof row.value === "number" ? `${row.value.toLocaleString("ru-RU")} ${row.unit || ""}` : row.value}</td>
+                <td className="muted tiny">{row.formula || ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -623,12 +635,13 @@ function DeductionTab({ calc, confirmed }) {
     <div className="stack-gap">
       <div className="kpi-grid six-kpi">
         <Kpi title="[DEMO_COST] без НДС" value={money(calc.demo_cost_net)} />
-        <Kpi title="[xP]" value={Number(calc.xP || 0).toFixed(3)} />
-        <Kpi title="[xR]" value={Number(calc.xR || 0).toFixed(3)} />
-        <Kpi title="[xM]" value={Number(calc.xM || 0).toFixed(3)} />
+        <Kpi title={`[xP] ${Number(calc.P || 0).toFixed(0)} / ${Number(calc.P_max || 0).toFixed(0)}`} value={Number(calc.xP || 0).toFixed(3)} />
+        <Kpi title={`[xR] ${Number(calc.R || 0).toFixed(0)} / ${Number(calc.R_max || 0).toFixed(0)}`} value={Number(calc.xR || 0).toFixed(3)} />
+        <Kpi title={`[xM] ${Number(calc.M || 0).toFixed(0)} / ${Number(calc.M_max || 0).toFixed(0)}`} value={Number(calc.xM || 0).toFixed(3)} />
         <Kpi title="[K2] = xP × xR × xM" value={Number(calc.K2 || 0).toFixed(3)} />
         <Kpi title="[K1] коэффициент ответственности" value={Number(calc.K1 || 0).toFixed(3)} />
       </div>
+      <div className="formula-box">Формула расчета: [VIC] = [K2] × [K1] × [DEMO_COST]. Подтвержденная директором сумма хранится как [VIC_CONFIRM] и участвует в карточке премии.</div>
       <div className="card totals-card">
         <Kpi title="Уменьшение премии, NET руб. (наличных на карте) [VIC]" value={money(calc.VIC)} />
         <Kpi title="Подтвержденная сумма вычета [VIC_CONFIRM]" value={money(confirmed)} />
@@ -638,26 +651,33 @@ function DeductionTab({ calc, confirmed }) {
 }
 
 function ExpenseSection({ title, rows, allRows, expenseMap, updateExpenseRow, readonly }) {
-  const rowIndex = (row) => allRows.findIndex((x) => x.article === row.article);
+  const rowIndex = (row, mapIndex) => allRows.findIndex((x, idx) => expenseKey(x, idx) === expenseKey(row, mapIndex));
+  const isDriverSection = rows.some((row) => row.section === "driver");
+  const priceNetTitle = isDriverSection ? "Цена, руб. на руки NET" : "Цена, руб. без НДС";
+  const amountNetTitle = isDriverSection ? "Сумма затрат (ПНД), руб. без НДС" : "Сумма без НДС";
+  const amountVatTitle = isDriverSection ? "Сумма эквивалент руб. с НДС" : "Сумма затрат, руб. с НДС";
   return (
     <div className="card">
       <div className="card-head compact-row"><h3>{title}</h3></div>
       <div className="table-shell">
-        <table className="dense-table">
-          <thead><tr><th>Статья</th><th>Кол-во</th><th>Ед.</th><th>Цена без НДС</th><th>Цена с НДС</th><th>Сумма с НДС</th></tr></thead>
+        <table className="dense-table expense-table">
+          <thead><tr><th>Статья</th><th>Кол-во</th><th>Ед.</th><th>{priceNetTitle}</th>{!isDriverSection && <th>Цена, руб. с НДС</th>}<th>{amountNetTitle}</th><th>{amountVatTitle}</th></tr></thead>
           <tbody>
-            {rows.map((row) => {
-              const index = rowIndex(row);
-              const conf = expenseMap[row.article] || row;
+            {rows.map((row, mapIndex) => {
+              const index = rowIndex(row, mapIndex);
+              const conf = expenseMap[expenseKey(row, mapIndex)] || row;
               const canQty = !readonly && !!conf.qty_manager;
               const canPrice = !readonly && !!conf.price_manager;
+              const priceNetReadOnly = row.calc_type === "cash_amount_vat" || row.calc_type === "npd_cash_input";
+              const priceVatReadOnly = ["npd_direct", "office_driver_km", "demo_work_total", "npd_cash_input", "office_cryoblaster"].includes(row.calc_type);
               return (
-                <tr key={row.article}>
+                <tr key={expenseKey(row, mapIndex)}>
                   <td><div className="row-title">{row.article}</div><div className="muted tiny">{row.comment}</div></td>
                   <td><input className={!canQty ? "locked-input" : "manager-input"} type="number" value={row.qty ?? 0} disabled={!canQty} onChange={(e) => updateExpenseRow(index, "qty", e.target.value)} /></td>
                   <td><input className="locked-input" value={row.unit || ""} disabled /></td>
-                  <td><input className={!canPrice ? "locked-input" : "manager-input"} type="number" value={row.price_net ?? 0} disabled={!canPrice} onChange={(e) => updateExpenseRow(index, "price_net", e.target.value)} /></td>
-                  <td><input className={!canPrice ? "locked-input" : "manager-input"} type="number" value={row.price_vat ?? 0} disabled={!canPrice} onChange={(e) => updateExpenseRow(index, "price_vat", e.target.value)} /></td>
+                  <td><input className={!canPrice || priceNetReadOnly ? "locked-input" : "manager-input"} type="number" value={row.price_net ?? 0} disabled={!canPrice || priceNetReadOnly} onChange={(e) => updateExpenseRow(index, "price_net", e.target.value)} /></td>
+                  {!isDriverSection && <td><input className={!canPrice || priceVatReadOnly ? "locked-input" : "manager-input"} type="number" value={row.price_vat ?? 0} disabled={!canPrice || priceVatReadOnly} onChange={(e) => updateExpenseRow(index, "price_vat", e.target.value)} /></td>}
+                  <td className="align-right strong readonly-cell">{money(row.amount_net)}</td>
                   <td className="align-right strong readonly-cell">{money(row.amount_vat)}</td>
                 </tr>
               );
@@ -790,9 +810,9 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
     cursor[parts.at(-1)] = value;
     return next;
   });
-  const updateExpense = (article, field, value) => setSettings((prev) => {
+  const updateExpense = (code, field, value) => setSettings((prev) => {
     const next = clone(prev);
-    const index = next.expense_settings.findIndex((row) => row.article === article);
+    const index = next.expense_settings.findIndex((row, rowIndex) => expenseKey(row, rowIndex) === code);
     if (index >= 0) next.expense_settings[index][field] = value;
     return next;
   });
@@ -819,8 +839,10 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
           <div className="fields-grid two">
             <Field label="[K1] — коэффициент ответственности"><input type="number" step="0.01" value={settings.k1 ?? 0.65} disabled={!isDirector} onChange={(e) => setField("k1", plainNum(e.target.value))} /></Field>
             <Field label="НДС, %"><input type="number" value={pctUi(settings.vat_rate)} disabled={!isDirector} onChange={(e) => setField("vat_rate", fromPctUi(e.target.value))} /></Field>
-            <Field label="Налоги на ФОТ, %"><input type="number" value={pctUi(settings.payroll_tax_rate)} disabled={!isDirector} onChange={(e) => setField("payroll_tax_rate", fromPctUi(e.target.value))} /></Field>
-            <Field label="Дизель, л/100 км"><input type="number" value={settings.diesel_l_per_100km ?? 12} disabled={!isDirector} onChange={(e) => setField("diesel_l_per_100km", plainNum(e.target.value))} /></Field>
+            <Field label="НПД, коэффициент к оплате"><input type="number" step="0.01" value={settings.npd_factor ?? 0.94} disabled={!isDirector} onChange={(e) => setField("npd_factor", plainNum(e.target.value))} /></Field>
+            <Field label="Средняя скорость, км/ч"><input type="number" value={settings.driver_avg_speed_kmh ?? 75} disabled={!isDirector} onChange={(e) => setField("driver_avg_speed_kmh", plainNum(e.target.value))} /></Field>
+            <Field label="Мед./тех. время водителя, ч"><input type="number" value={settings.driver_prep_hours ?? 2} disabled={!isDirector} onChange={(e) => setField("driver_prep_hours", plainNum(e.target.value))} /></Field>
+            <Field label="Дизель, л/100 км"><input type="number" value={settings.diesel_l_per_100km ?? 15} disabled={!isDirector} onChange={(e) => setField("diesel_l_per_100km", plainNum(e.target.value))} /></Field>
           </div>
           <OfficeRatesTable cities={cities} settings={settings} isDirector={isDirector} updateOfficeRate={updateOfficeRate} />
         </div>
@@ -874,13 +896,16 @@ function OfficeRatesTable({ cities, settings, isDirector, updateOfficeRate, comp
 }
 
 function SettlementSettingsInfo() {
-  return <div className="formula-box">Расчеты с водителем используют километраж по маячку А5/А6, поле «Время работы демонстратором», город офиса менеджера и административные ставки. Эти значения затем автоматически попадают в Часть 1 сметы демонстрации.</div>;
+  return <div className="formula-box">Расчеты с водителем используют Excel-логику строк 26B:35C: кругорейс / средняя скорость, административное время, время работы демонстратором, сумма НПД по Части 1 и коэффициент НПД 0.94. Город офиса менеджера фиксируется в БД и подставляет три городские ставки автоматически.</div>;
 }
 
 function ExpenseSettingsTable({ rows, isDirector, updateExpense }) {
   return (
-    <div className="table-shell"><table className="dense-table"><thead><tr><th>Статья</th><th>Ед.</th><th>Кол-во</th><th>Цена без НДС</th><th>Цена с НДС</th><th>Кол-во ред.</th><th>Цена ред.</th><th>Тип</th></tr></thead><tbody>
-      {rows.map((row) => <tr key={row.article}><td><div className="row-title">{row.article}</div><div className="muted tiny">{row.comment}</div></td><td><input value={row.unit || ""} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "unit", e.target.value)} /></td><td><input type="number" value={row.qty_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "qty_default", Number(e.target.value || 0))} /></td><td><input type="number" value={row.price_net_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "price_net_default", Number(e.target.value || 0))} /></td><td><input type="number" value={row.price_vat_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "price_vat_default", Number(e.target.value || 0))} /></td><td><input type="checkbox" checked={!!row.qty_manager} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "qty_manager", e.target.checked)} /></td><td><input type="checkbox" checked={!!row.price_manager} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "price_manager", e.target.checked)} /></td><td>{row.calc_type}</td></tr>)}
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Код</th><th>Статья</th><th>Ед.</th><th>Кол-во</th><th>Цена без НДС / NET</th><th>Цена с НДС</th><th>Кол-во ред.</th><th>Цена ред.</th><th>Тип</th></tr></thead><tbody>
+      {rows.map((row, index) => {
+        const code = expenseKey(row, index);
+        return <tr key={code}><td className="muted tiny">{code}</td><td><div className="row-title">{row.article}</div><div className="muted tiny">{row.comment}</div></td><td><input value={row.unit || ""} disabled={!isDirector} onChange={(e) => updateExpense(code, "unit", e.target.value)} /></td><td><input type="number" value={row.qty_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(code, "qty_default", Number(e.target.value || 0))} /></td><td><input type="number" value={row.price_net_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(code, "price_net_default", Number(e.target.value || 0))} /></td><td><input type="number" value={row.price_vat_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(code, "price_vat_default", Number(e.target.value || 0))} /></td><td><input type="checkbox" checked={!!row.qty_manager} disabled={!isDirector} onChange={(e) => updateExpense(code, "qty_manager", e.target.checked)} /></td><td><input type="checkbox" checked={!!row.price_manager} disabled={!isDirector} onChange={(e) => updateExpense(code, "price_manager", e.target.checked)} /></td><td>{row.calc_type}</td></tr>;
+      })}
     </tbody></table></div>
   );
 }
