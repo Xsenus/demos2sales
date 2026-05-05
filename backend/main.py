@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS demo_expenses (
     id BIGSERIAL PRIMARY KEY,
     action_id TEXT NOT NULL REFERENCES actions(action_id) ON DELETE CASCADE,
     row_order INTEGER NOT NULL,
+    row_code TEXT NOT NULL DEFAULT '',
     article TEXT NOT NULL,
     qty NUMERIC(14,4) NOT NULL DEFAULT 0,
     unit TEXT NOT NULL DEFAULT '',
@@ -161,6 +162,7 @@ MIGRATION_SQL = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS row_order INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS city_params JSONB NOT NULL DEFAULT '{}'::jsonb",
     "ALTER TABLE actions ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE demo_expenses ADD COLUMN IF NOT EXISTS row_code TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS pr0_vat NUMERIC(14,2) NOT NULL DEFAULT 0",
     "ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS mr_unit NUMERIC(14,2) NOT NULL DEFAULT 0",
     "ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS pr_unit NUMERIC(14,2) NOT NULL DEFAULT 0",
@@ -290,9 +292,11 @@ def office_names(settings: Dict[str, Any]) -> List[str]:
 
 
 def default_office_rates() -> Dict[str, Dict[str, float]]:
+    # Три административные ставки из Excel-калькулятора зависят от офиса менеджера.
+    # Для Москвы значения взяты из примера «Москва 300 км»: 20 / 6000 / 22000.
     return {
-        "Казань": {"driver_km_rate": 15.0, "cryoblaster_rate": 4000.0, "gazelle_rate": 10.0, "sale_st": 0.565},
-        "Москва": {"driver_km_rate": 18.0, "cryoblaster_rate": 4500.0, "gazelle_rate": 12.0, "sale_st": 0.465},
+        "Казань": {"driver_km_rate": 15.0, "cryoblaster_rate": 4000.0, "gazelle_rate": 18000.0, "sale_st": 0.565},
+        "Москва": {"driver_km_rate": 20.0, "cryoblaster_rate": 6000.0, "gazelle_rate": 22000.0, "sale_st": 0.465},
     }
 
 
@@ -301,7 +305,10 @@ def default_settings() -> Dict[str, Any]:
         "vat_rate": 0.22,
         "k1": 0.65,
         "payroll_tax_rate": 0.30,
-        "diesel_l_per_100km": 12.0,
+        "npd_factor": 0.94,
+        "driver_avg_speed_kmh": 75.0,
+        "driver_prep_hours": 2.0,
+        "diesel_l_per_100km": 15.0,
         "office_cities": deepcopy(DEFAULT_OFFICE_CITIES),
         "office_rates": default_office_rates(),
         "font_family": "Arial",
@@ -323,33 +330,55 @@ def default_settings() -> Dict[str, Any]:
 
 def merge_settings(settings: Any) -> Dict[str, Any]:
     base = default_settings()
+    legacy_upgrade = False
     if not isinstance(settings, dict):
         return base
     deprecated_keys = {"company" + "_support_vat", "bonus" + "_rate", "max_demo" + "_deduction_pct"}
     for k, v in settings.items():
         if k in deprecated_keys:
+            legacy_upgrade = True
             continue
         if isinstance(v, dict) and isinstance(base.get(k), dict):
             base[k].update(clean_json(v))
         else:
             base[k] = clean_json(v)
-    if not base.get("criteria"):
+
+    default_criterion_codes = {c["code"] for c in DEFAULT_CRITERIA}
+    current_criterion_codes = {str(c.get("code")) for c in base.get("criteria", []) if isinstance(c, dict)}
+    if not base.get("criteria") or current_criterion_codes != default_criterion_codes:
         base["criteria"] = deepcopy(DEFAULT_CRITERIA)
-    if not base.get("expense_settings"):
+        legacy_upgrade = True
+
+    default_expense_codes = {e["code"] for e in DEFAULT_EXPENSE_SETTINGS}
+    current_expense_codes = {str(e.get("code")) for e in base.get("expense_settings", []) if isinstance(e, dict) and e.get("code")}
+    if not base.get("expense_settings") or current_expense_codes != default_expense_codes:
         base["expense_settings"] = deepcopy(DEFAULT_EXPENSE_SETTINGS)
+        legacy_upgrade = True
+
     for row in base.get("expense_settings", []):
+        row.setdefault("code", str(row.get("article", "")))
         row.setdefault("section", "other")
         row.setdefault("qty_manager", True)
         row.setdefault("price_manager", True)
+
     names = office_names(base)
-    rates = base.setdefault("office_rates", {})
     default_rates = default_office_rates()
+    if legacy_upgrade:
+        # Старые выгрузки хранили не те значения для Excel-ставок и Газель как ставку за км.
+        base["office_rates"] = deepcopy(default_rates)
+        base["diesel_l_per_100km"] = 15.0
+    rates = base.setdefault("office_rates", {})
     for name in names:
-        rates.setdefault(name, deepcopy(default_rates.get(name, {"driver_km_rate": 15, "cryoblaster_rate": 4000, "gazelle_rate": 10, "sale_st": 0.50})))
+        rates.setdefault(name, deepcopy(default_rates.get(name, {"driver_km_rate": 15, "cryoblaster_rate": 4000, "gazelle_rate": 18000, "sale_st": 0.50})))
         rates[name].setdefault("driver_km_rate", default_rates.get(name, {}).get("driver_km_rate", 15.0))
         rates[name].setdefault("cryoblaster_rate", default_rates.get(name, {}).get("cryoblaster_rate", 4000.0))
-        rates[name].setdefault("gazelle_rate", default_rates.get(name, {}).get("gazelle_rate", 10.0))
+        rates[name].setdefault("gazelle_rate", default_rates.get(name, {}).get("gazelle_rate", 18000.0))
         rates[name].setdefault("sale_st", default_rates.get(name, {}).get("sale_st", 0.50))
+        if to_float(rates[name].get("gazelle_rate"), 0) < 1000:
+            rates[name]["gazelle_rate"] = default_rates.get(name, {}).get("gazelle_rate", 18000.0)
+    base.setdefault("npd_factor", 0.94)
+    base.setdefault("driver_avg_speed_kmh", 75.0)
+    base.setdefault("driver_prep_hours", 2.0)
     base["font_family"] = "Arial"
     return base
 
@@ -568,7 +597,11 @@ def calculate_sale(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
 
 
 def expense_settings_map(settings: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    return {s["article"]: s for s in settings.get("expense_settings", DEFAULT_EXPENSE_SETTINGS)}
+    return {str(s.get("code") or s.get("article")): s for s in settings.get("expense_settings", DEFAULT_EXPENSE_SETTINGS)}
+
+
+def expense_key(row: Dict[str, Any], fallback_order: int = 0) -> str:
+    return str(row.get("code") or row.get("row_code") or f"{row.get('article', '')}::{row.get('unit', '')}::{fallback_order}")
 
 
 def get_demo_meta(action: Dict[str, Any]) -> Dict[str, Any]:
@@ -580,34 +613,70 @@ def get_demo_meta(action: Dict[str, Any]) -> Dict[str, Any]:
     return meta
 
 
-def base_amount_net_for_row(qty: float, price_net: float, price_vat: float, vat: float, calc_type: str) -> Tuple[float, float, float]:
-    if calc_type == "direct_vat_price":
+def base_amount_net_for_row(qty: float, price_net: float, price_vat: float, vat: float, calc_type: str, settings: Optional[Dict[str, Any]] = None) -> Tuple[float, float, float, float]:
+    settings = settings or default_settings()
+    npd = max(0.01, to_float(settings.get("npd_factor"), 0.94))
+    amount_net = 0.0
+    amount_vat = 0.0
+
+    if calc_type in {"npd_direct", "office_driver_km", "demo_work_total", "office_cryoblaster"}:
+        price_vat = 0
+        amount_net = qty * price_net / npd
+        amount_vat = amount_net * (1 + vat)
+    elif calc_type == "npd_cash_input":
+        price_net = qty
+        price_vat = 0
+        amount_net = price_net / npd
+        amount_vat = amount_net * (1 + vat)
+    elif calc_type == "cash_amount_vat":
+        price_vat = qty
+        price_net = price_vat / (1 + vat) if price_vat else 0
+        amount_net = price_net
+        amount_vat = price_vat
+    elif calc_type in {"direct_vat_price", "diesel"}:
         if price_vat <= 0 and price_net > 0:
             price_vat = price_net * (1 + vat)
         if price_net <= 0 and price_vat > 0:
             price_net = price_vat / (1 + vat)
+        amount_net = qty * price_net
+        amount_vat = qty * price_vat
     else:
         if price_net <= 0 and price_vat > 0:
             price_net = price_vat / (1 + vat)
         if price_vat <= 0 and price_net > 0:
             price_vat = price_net * (1 + vat)
-    amount_vat = qty * price_vat
-    return price_net, price_vat, amount_vat
+        amount_net = qty * price_net
+        amount_vat = qty * price_vat
+    return price_net, price_vat, amount_net, amount_vat
 
 
 def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[Dict[str, Any]]:
     settings = state["settings"]
     vat = to_float(settings.get("vat_rate"), 0.22)
     office_city = manager_office_city(state, action.get("manager_login"))
-    rates = settings.get("office_rates", {}).get(office_city, {})
-    existing_by_article = {str(r.get("article", "")): r for r in action.get("expenses", []) or []}
+    existing = action.get("expenses", []) or []
+    existing_by_code = {expense_key(r, i): r for i, r in enumerate(existing, start=1)}
+    existing_by_article_unit = {(str(r.get("article", "")), str(r.get("unit", ""))): r for r in existing}
     rows: List[Dict[str, Any]] = []
+    meta = get_demo_meta(action)
+    demo_hours = to_float(meta.get("demo_hours"), 0)
+    if demo_hours <= 0:
+        demo_hours = 2.0
+
+    # Kilometers are needed by several Excel formulas.
+    default_km = 300.0
+    for r in existing:
+        if str(r.get("calc_type")) == "office_driver_km" or str(r.get("article")) == "Работа водителя за километраж по маячку А5/А6":
+            default_km = to_float(r.get("qty"), default_km)
+            break
+
     for i, s in enumerate(settings.get("expense_settings", DEFAULT_EXPENSE_SETTINGS), start=1):
+        code = str(s.get("code") or f"expense_{i}")
         article = s.get("article", "")
-        old = existing_by_article.get(article, {})
+        unit = str(s.get("unit", ""))
+        old = existing_by_code.get(code) or existing_by_article_unit.get((str(article), unit), {})
         calc_type = s.get("calc_type", "direct")
         qty = to_float(old.get("qty"), s.get("qty_default", 0))
-        unit = str(s.get("unit", old.get("unit", "")))
         price_net = to_float(old.get("price_net"), s.get("price_net_default", 0) or 0)
         price_vat = to_float(old.get("price_vat"), s.get("price_vat_default", 0) or 0)
         if not bool(s.get("qty_manager", True)):
@@ -615,87 +684,56 @@ def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[D
         if not bool(s.get("price_manager", True)):
             price_net = to_float(s.get("price_net_default"), price_net)
             price_vat = to_float(s.get("price_vat_default"), price_vat)
+
+        if calc_type == "office_driver_km":
+            price_net = office_rate(settings, office_city, "driver_km_rate", price_net or 15)
+            price_vat = 0
+            default_km = qty
+        elif calc_type == "demo_work_total":
+            qty = to_float(settings.get("driver_prep_hours"), 2.0) + demo_hours
+            if price_net <= 0:
+                price_net = 1350
+            price_vat = 0
+        elif calc_type == "npd_cash_input":
+            price_net = qty
+            price_vat = 0
+        elif calc_type == "office_cryoblaster":
+            price_net = office_rate(settings, office_city, "cryoblaster_rate", price_net or 4000)
+            price_vat = 0
+        elif calc_type == "diesel":
+            qty = default_km / 100.0 * to_float(settings.get("diesel_l_per_100km"), 15.0)
+            if price_vat <= 0:
+                price_vat = to_float(s.get("price_vat_default"), 72)
+            price_net = price_vat / (1 + vat) if price_vat else 0
+        elif calc_type == "office_gazelle_amort_total":
+            qty = to_float(s.get("qty_default"), 1) or 1
+            price_net = office_rate(settings, office_city, "gazelle_rate", price_net or 18000)
+            price_vat = price_net * (1 + vat)
+
+        price_net, price_vat, amount_net, amount_vat = base_amount_net_for_row(qty, price_net, price_vat, vat, calc_type, settings)
         rows.append({
             "row_order": i,
+            "code": code,
+            "row_code": code,
             "article": article,
             "section": s.get("section", "other"),
-            "qty": qty,
+            "qty": round(to_float(qty), 4),
             "unit": unit,
-            "price_net": price_net,
-            "price_vat": price_vat,
-            "amount_vat": 0,
+            "price_net": round(price_net, 2),
+            "price_vat": round(price_vat, 2),
+            "amount_net": round(amount_net, 2),
+            "amount_vat": round(amount_vat, 2),
             "calc_type": calc_type,
             "is_custom": False,
             "comment": s.get("comment", ""),
             "qty_manager": bool(s.get("qty_manager", True)),
             "price_manager": bool(s.get("price_manager", True)),
         })
-
-    driver_row = next((r for r in rows if r["calc_type"] == "office_driver_km"), None)
-    km = to_float(driver_row.get("qty") if driver_row else 0, 0)
-    meta = get_demo_meta(action)
-    demo_hours = to_float(meta.get("demo_hours"), 0)
-    if demo_hours <= 0:
-        demo_hours = next((to_float(r.get("qty")) for r in rows if r["calc_type"] == "demo_hours"), 8)
-    amount_by_article: Dict[str, float] = {}
-    for r in rows:
-        ct = r["calc_type"]
-        if ct == "office_driver_km":
-            r["price_net"] = office_rate(settings, office_city, "driver_km_rate", to_float(r.get("price_net"), 15))
-            r["price_vat"] = r["price_net"] * (1 + vat)
-        elif ct == "demo_hours":
-            r["qty"] = demo_hours
-            if r["price_net"] <= 0:
-                r["price_net"] = 1350
-            r["price_vat"] = r["price_net"] * (1 + vat)
-        elif ct == "office_cryoblaster":
-            r["qty"] = demo_hours
-            r["price_net"] = office_rate(settings, office_city, "cryoblaster_rate", to_float(r.get("price_net"), 4000))
-            r["price_vat"] = r["price_net"] * (1 + vat)
-        elif ct == "diesel":
-            r["qty"] = km / 100.0 * to_float(settings.get("diesel_l_per_100km"), 12)
-            if r["price_vat"] <= 0:
-                r["price_vat"] = 78
-            r["price_net"] = r["price_vat"] / (1 + vat)
-        elif ct == "office_gazelle_amort":
-            r["qty"] = km
-            r["price_net"] = office_rate(settings, office_city, "gazelle_rate", to_float(r.get("price_net"), 10))
-            r["price_vat"] = r["price_net"] * (1 + vat)
-        elif ct == "payroll_tax":
-            r["qty"] = 1
-            r["price_net"] = 0
-            r["price_vat"] = 0
-            r["amount_vat"] = 0
-            amount_by_article[r["article"]] = 0
-            continue
-        r["price_net"], r["price_vat"], r["amount_vat"] = base_amount_net_for_row(
-            to_float(r.get("qty")), to_float(r.get("price_net")), to_float(r.get("price_vat")), vat, ct
-        )
-        amount_by_article[r["article"]] = r["amount_vat"]
-
-    payroll_base_articles = [
-        "Работа водителя за километраж по маячку А5/А6",
-        "Работа демонстратора",
-        "Демонстрация криобластера",
-    ]
-    for r in rows:
-        if r["calc_type"] == "payroll_tax":
-            base_net = sum(to_float(amount_by_article.get(a)) / (1 + vat) for a in payroll_base_articles)
-            tax_net = base_net * to_float(settings.get("payroll_tax_rate"), 0.30)
-            r["price_net"] = tax_net
-            r["price_vat"] = tax_net * (1 + vat)
-            r["amount_vat"] = r["price_vat"]
-
-    for r in rows:
-        r["qty"] = round(to_float(r.get("qty")), 4)
-        r["price_net"] = round(to_float(r.get("price_net")), 2)
-        r["price_vat"] = round(to_float(r.get("price_vat")), 2)
-        r["amount_vat"] = round(to_float(r.get("amount_vat")), 2)
     return rows
 
 
 def default_expense_rows(state: Dict[str, Any], manager_login: Optional[str] = None) -> List[Dict[str, Any]]:
-    action = {"manager_login": manager_login or manager_logins(state)[0] if manager_logins(state) else "ruslan", "expenses": [], "demo_meta": {"demo_hours": 8}}
+    action = {"manager_login": manager_login or manager_logins(state)[0] if manager_logins(state) else "ruslan", "expenses": [], "demo_meta": {"demo_hours": 2}}
     return normalize_demo_rows(action, state)
 
 
@@ -717,11 +755,11 @@ def calculate_criteria_coeffs(action: Dict[str, Any], settings: Dict[str, Any]) 
     for block in ["P", "R", "M"]:
         score = block_data[block]["score"]
         max_score = block_data[block]["max"] or 1
+        # xP/xR/xM are block efficiency coefficients from the Excel sheets: score / max score.
         efficiency = min(1.0, max(0.0, score / max_score))
-        coeff = max(0.20, 1.0 - 0.80 * efficiency)
         result[block] = round(score, 2)
         result[f"{block}_max"] = round(max_score, 2)
-        result[f"x{block}"] = round(coeff, 6)
+        result[f"x{block}"] = round(efficiency, 6)
     result["K2"] = round(result["xP"] * result["xR"] * result["xM"], 6)
     return result
 
@@ -739,20 +777,38 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
         "driver": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") == "driver"),
         "other": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") != "driver"),
     }
-    driver_rows = {r["article"]: r for r in expenses}
+    by_code = {expense_key(r, i): r for i, r in enumerate(expenses, start=1)}
+    km = to_float(by_code.get("d_driver_km", {}).get("qty"), 0)
+    demo_hours = to_float(get_demo_meta(action).get("demo_hours"), 2)
+    prep_hours = to_float(settings.get("driver_prep_hours"), 2)
+    avg_speed = max(1.0, to_float(settings.get("driver_avg_speed_kmh"), 75))
+    road_hours = km / avg_speed
+    shift_hours = road_hours + prep_hours + demo_hours
+    npd_invoice = sum(to_float(r.get("amount_net")) for r in expenses if r.get("section") == "driver")
+    reward_net = npd_invoice * max(0.01, to_float(settings.get("npd_factor"), 0.94))
+    driver_rate = reward_net / shift_hours if shift_hours else 0
+    demo_count = to_float(by_code.get("d_cryoblaster", {}).get("qty"), 0)
     settlement = [
-        {"name": "Офис продаж менеджера", "value": manager_office_city(state, action.get("manager_login"))},
-        {"name": "Километраж по маячку А5/А6", "value": round(to_float(driver_rows.get("Работа водителя за километраж по маячку А5/А6", {}).get("qty")), 2), "unit": "км"},
-        {"name": "Время работы демонстратором", "value": round(to_float(get_demo_meta(action).get("demo_hours"), 8), 2), "unit": "ч"},
-        {"name": "Работа водителя", "value": round(to_float(driver_rows.get("Работа водителя за километраж по маячку А5/А6", {}).get("amount_vat")), 2), "unit": "руб. с НДС"},
-        {"name": "Работа демонстратора", "value": round(to_float(driver_rows.get("Работа демонстратора", {}).get("amount_vat")), 2), "unit": "руб. с НДС"},
-        {"name": "Демонстрация криобластера", "value": round(to_float(driver_rows.get("Демонстрация криобластера", {}).get("amount_vat")), 2), "unit": "руб. с НДС"},
-        {"name": "Налоги на ФОТ", "value": round(to_float(driver_rows.get("Налоги на ФОТ", {}).get("amount_vat")), 2), "unit": "руб. с НДС"},
-        {"name": "Итого расчеты с водителем", "value": round(by_section["driver"], 2), "unit": "руб. с НДС"},
+        {"name": "Время в дороге при средней скорости 75 км/ч (туда-обратно)", "value": round(road_hours, 2), "unit": "ч", "formula": "Кругорейс / 75"},
+        {"name": "Время на мед. и тех. осмотр, подписание актов, забор льда", "value": round(prep_hours, 2), "unit": "ч", "formula": "Административная настройка"},
+        {"name": "Время работы демонстратором", "value": round(demo_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
+        {"name": "Общее время трудовой смены", "value": round(shift_hours, 2), "unit": "ч", "formula": "Сумма трех строк выше"},
+        {"name": "Расчетная ставка для водителя-демонстратора", "value": round(driver_rate, 2), "unit": "руб./ч", "formula": "Вознаграждение NET / смена"},
+        {"name": "Вознаграждение водителя NET за смену, руб.", "value": round(reward_net, 2), "unit": "руб.", "formula": "Сумма НПД × 0.94"},
+        {"name": "Сумма для счета НПД за смену", "value": round(npd_invoice, 2), "unit": "руб.", "formula": "Сумма затрат Части 1 без НДС"},
+        {"name": "Эквивалент зарплаты в месяц (21 смена) NET, руб.", "value": round(reward_net * 21, 2), "unit": "руб.", "formula": "Вознаграждение × 21"},
+        {"name": "Эквивалент зарплаты в месяц (30 смен) NET, руб.", "value": round(reward_net * 30, 2), "unit": "руб.", "formula": "Вознаграждение × 30"},
+    ]
+    settlement_summary = [
+        {"name": "Кругорейс, км", "value": round(km, 2), "unit": "км"},
+        {"name": "Кол-во демо по 3 часа на месте", "value": round(demo_count, 2), "unit": "усл"},
+        {"name": "Длительность смены водителя, часы", "value": round(shift_hours, 2), "unit": "ч"},
+        {"name": "Вознаграждение водителя NET за смену, руб.", "value": round(reward_net, 2), "unit": "руб."},
     ]
     return {
         "expenses": expenses,
         "driver_settlement": settlement,
+        "driver_settlement_summary": settlement_summary,
         "total_vat": round(total_vat, 2),
         "demo_cost_net": round(demo_cost, 2),
         "cost_net": round(demo_cost, 2),
@@ -766,6 +822,9 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
         "P": coeffs["P"],
         "R": coeffs["R"],
         "M": coeffs["M"],
+        "P_max": coeffs["P_max"],
+        "R_max": coeffs["R_max"],
+        "M_max": coeffs["M_max"],
         "VIC": round(vic, 2),
         "deduction_net": round(vic, 2),
     }
@@ -973,16 +1032,18 @@ def create_demo_state() -> Dict[str, Any]:
                 "director_comment": "",
             }
             if action_type == ACTION_DEMO:
-                a["demo_meta"] = {"demo_hours": 6 + (idx % 4) * 2}
+                a["demo_meta"] = {"demo_hours": 2 + (idx % 4) * 2}
                 rows = default_expense_rows(state, manager)
                 # Разные параметры демонстрации.
                 for r in rows:
                     if r["calc_type"] == "office_driver_km":
                         r["qty"] = [120, 300, 520, 740, 900][idx % 5]
-                    if r["article"] == "Расходы на закупку сухого льда":
-                        r["qty"] = [120, 220, 300, 380][idx % 4]
+                    if r.get("code") == "d_cryoblaster":
+                        r["qty"] = [1, 1, 2, 1][idx % 4]
+                    if r.get("code") == "o_dry_ice_purchase":
+                        r["qty"] = [30, 60, 90, 120][idx % 4]
                 a["expenses"] = rows
-                a["criteria"] = mk_criteria(settings, idx % 3)
+                a["criteria"] = mk_criteria(settings, (idx % 3) + 1)
             elif action_type == ACTION_SALE:
                 p1 = products[(idx + m_index) % len(products)]
                 p2 = products[(idx + m_index + 2) % len(products)]
@@ -1124,9 +1185,9 @@ def persist_state_to_db(state: Dict[str, Any]) -> str:
                 if a["type"] == ACTION_DEMO:
                     expense_rows = []
                     for i, r in enumerate(normalize_demo_rows(a, state), start=1):
-                        expense_rows.append((a["id"], i, r.get("article", ""), to_float(r.get("qty")), r.get("unit", ""), to_float(r.get("price_net")), to_float(r.get("price_vat")), to_float(r.get("amount_vat")), r.get("calc_type", "direct"), False, r.get("comment", "")))
+                        expense_rows.append((a["id"], i, r.get("code") or r.get("row_code") or f"expense_{i}", r.get("article", ""), to_float(r.get("qty")), r.get("unit", ""), to_float(r.get("price_net")), to_float(r.get("price_vat")), to_float(r.get("amount_vat")), r.get("calc_type", "direct"), False, r.get("comment", "")))
                     if expense_rows:
-                        execute_values(cur, "INSERT INTO demo_expenses(action_id,row_order,article,qty,unit,price_net,price_vat,amount_vat,calc_type,is_custom,comment) VALUES %s", expense_rows)
+                        execute_values(cur, "INSERT INTO demo_expenses(action_id,row_order,row_code,article,qty,unit,price_net,price_vat,amount_vat,calc_type,is_custom,comment) VALUES %s", expense_rows)
                     criteria_rows = []
                     for code, value in (a.get("criteria", {}) or {}).items():
                         criteria_rows.append((a["id"], code, int(value.get("level_index", 0)), value.get("manager_comment", "")))
@@ -1212,7 +1273,7 @@ def add_action(state: Dict[str, Any], user: Dict[str, Any], action_type: str, ma
         "director_comment": "",
     }
     if action_type == ACTION_DEMO:
-        action["demo_meta"] = {"demo_hours": 8}
+        action["demo_meta"] = {"demo_hours": 2}
         action["expenses"] = default_expense_rows(state, manager_login)
         action["criteria"] = mk_criteria(state["settings"], 0)
     elif action_type == ACTION_SALE:
@@ -1355,9 +1416,14 @@ def serialize_action_detail(action: Dict[str, Any], state: Dict[str, Any]) -> Di
     if action["type"] == ACTION_DEMO:
         base["demo_meta"] = get_demo_meta(action)
         calc = calculate_demo(action, state)
+        # В карточку отдаем уже нормализованную фиксированную смету из Excel-логики,
+        # чтобы старые БД с 3 строками автоматически раскрывались до полной сметы.
+        base["expenses"] = calc["expenses"]
+        base.setdefault("criteria", {})
         result = {"action": base, "kind": "demo", "calc": calc, "criteria_blocks": serialize_criteria_blocks(action, state["settings"])}
     elif action["type"] == ACTION_SALE:
         calc = calculate_sale(action, state)
+        base["rows"] = calc["rows"]
         result = {"action": base, "kind": "sale", "calc": calc}
     else:
         calc = calculate_premium(action, state)

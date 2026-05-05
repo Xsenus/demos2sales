@@ -1,5 +1,6 @@
 [
   {
+    "code": "d_driver_km",
     "article": "Работа водителя за километраж по маячку А5/А6",
     "section": "driver",
     "unit": "км",
@@ -9,49 +10,131 @@
     "qty_manager": true,
     "price_manager": false,
     "calc_type": "office_driver_km",
-    "comment": "Количество вводит менеджер; ставка подставляется по офису менеджера"
+    "comment": "Количество вводит менеджер; ставка NET на руки подставляется по офису менеджера; НПД считается через 0.94"
   },
   {
-    "article": "Работа демонстратора",
+    "code": "d_demo_work",
+    "article": "Работа демонстратора*",
     "section": "driver",
-    "unit": "ч",
-    "qty_default": 8,
+    "unit": "часы",
+    "qty_default": 4,
     "price_net_default": 1350,
     "price_vat_default": 0,
     "qty_manager": false,
     "price_manager": false,
-    "calc_type": "demo_hours",
-    "comment": "Количество равно полю «Время работы демонстратором»"
+    "calc_type": "demo_work_total",
+    "comment": "Количество = время на мед./тех. осмотр + время работы демонстратором; НПД считается через 0.94"
   },
   {
-    "article": "Демонстрация криобластера",
+    "code": "d_night_compensation",
+    "article": "Компенсация за ночевку и другие согласованные расходы",
     "section": "driver",
-    "unit": "ч",
-    "qty_default": 8,
+    "unit": "руб. на руки",
+    "qty_default": 0,
     "price_net_default": 0,
     "price_vat_default": 0,
-    "qty_manager": false,
+    "qty_manager": true,
     "price_manager": false,
-    "calc_type": "office_cryoblaster",
-    "comment": "Ставка подставляется по офису менеджера"
+    "calc_type": "npd_cash_input",
+    "comment": "Менеджер вводит сумму на руки; НПД считается через 0.94"
   },
   {
-    "article": "Налоги на ФОТ",
+    "code": "d_cryoblaster",
+    "article": "Демонстрация криобластера",
     "section": "driver",
     "unit": "усл",
     "qty_default": 1,
     "price_net_default": 0,
     "price_vat_default": 0,
-    "qty_manager": false,
+    "qty_manager": true,
     "price_manager": false,
-    "calc_type": "payroll_tax",
-    "comment": "Автоматически от сумм ГПХ/ПНД"
+    "calc_type": "office_cryoblaster",
+    "comment": "Количество вводит менеджер; ставка NET на руки подставляется по офису менеджера; НПД считается через 0.94"
   },
   {
+    "code": "d_hard_conditions",
+    "article": "Усложненные условия труда",
+    "section": "driver",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 1700,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "npd_direct",
+    "comment": "Жара/холод/дождь/снег/противогаз/грязная или шумная среда/улица/сложный допуск, если указано в акте"
+  },
+  {
+    "code": "d_electric_compressor",
+    "article": "Работа с электрическим компрессором в фанере",
+    "section": "driver",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 3500,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": false,
+    "calc_type": "npd_direct",
+    "comment": "Административная ставка; количество вводит менеджер"
+  },
+  {
+    "code": "d_electro_reel",
+    "article": "Использование электрокатушки",
+    "section": "driver",
+    "unit": "усл",
+    "qty_default": 1,
+    "price_net_default": 1000,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "npd_direct",
+    "comment": "Менеджер может менять количество и ставку NET на руки"
+  },
+  {
+    "code": "d_load_unload",
+    "article": "Выгрузка и загрузка компрессора и электрокатушки",
+    "section": "driver",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 2000,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "npd_direct",
+    "comment": "Снятие/монтаж ремней, подготовка к перемещению, перемещение на колесах/платформе или с механизацией"
+  },
+  {
+    "code": "o_transport_fixed",
+    "article": "Расходы на перевозку чужим транспортом (туда-обратно)",
+    "section": "other",
+    "unit": "усл",
+    "qty_default": 0,
+    "price_net_default": 2800,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Менеджерское поле"
+  },
+  {
+    "code": "o_transport_km",
+    "article": "Расходы на перевозку чужим транспортом (туда-обратно)",
+    "section": "other",
+    "unit": "км",
+    "qty_default": 0,
+    "price_net_default": 41,
+    "price_vat_default": 0,
+    "qty_manager": true,
+    "price_manager": true,
+    "calc_type": "direct",
+    "comment": "Менеджерское поле по километражу стороннего транспорта"
+  },
+  {
+    "code": "o_hotel_manager",
     "article": "Расходы на отель Менеджера",
     "section": "other",
-    "unit": "день × чел",
-    "qty_default": 1,
+    "unit": "день х чел",
+    "qty_default": 0,
     "price_net_default": 2800,
     "price_vat_default": 0,
     "qty_manager": true,
@@ -60,10 +143,11 @@
     "comment": "Менеджерское поле"
   },
   {
+    "code": "o_hotel_driver",
     "article": "Расходы на отель Водителя",
     "section": "other",
-    "unit": "день × чел",
-    "qty_default": 1,
+    "unit": "день х чел",
+    "qty_default": 0,
     "price_net_default": 2800,
     "price_vat_default": 0,
     "qty_manager": true,
@@ -72,6 +156,7 @@
     "comment": "Менеджерское поле"
   },
   {
+    "code": "o_manager_travel",
     "article": "Расходы на переезд менеджера",
     "section": "other",
     "unit": "усл",
@@ -84,66 +169,72 @@
     "comment": "Менеджерское поле"
   },
   {
-    "article": "Расходы на платную дорогу",
+    "code": "o_toll",
+    "article": "Расходы на платную дорогу (туда-обратно) по транспондеру",
     "section": "other",
     "unit": "усл",
     "qty_default": 0,
     "price_net_default": 0,
     "price_vat_default": 0,
     "qty_manager": true,
-    "price_manager": true,
-    "calc_type": "direct",
-    "comment": "Менеджерское поле"
+    "price_manager": false,
+    "calc_type": "cash_amount_vat",
+    "comment": "Менеджер вводит сумму платежа; сумма попадает в расходы с НДС как в Excel"
   },
   {
-    "article": "Суточные для командировки",
+    "code": "o_per_diem",
+    "article": "Суточные по командировки (при ночевке)",
     "section": "other",
-    "unit": "день × чел",
-    "qty_default": 2,
+    "unit": "день х чел",
+    "qty_default": 1,
     "price_net_default": 1500,
     "price_vat_default": 0,
-    "qty_manager": false,
+    "qty_manager": true,
     "price_manager": false,
     "calc_type": "direct",
-    "comment": "Административная норма"
+    "comment": "Количество вводит менеджер; ставка административная"
   },
   {
-    "article": "Расходы на дизель",
+    "code": "o_diesel",
+    "article": "Расходы на дизель (15 л/100км), л",
     "section": "other",
-    "unit": "л",
+    "unit": "литры",
     "qty_default": 0,
     "price_net_default": 0,
-    "price_vat_default": 78,
+    "price_vat_default": 72,
     "qty_manager": false,
-    "price_manager": false,
+    "price_manager": true,
     "calc_type": "diesel",
-    "comment": "Формула: км / 100 × расход топлива"
+    "comment": "Количество = километраж / 100 × 15; цена с НДС вводится менеджером"
   },
   {
+    "code": "o_gazelle_amort",
     "article": "Амортизация Газели и ТО",
     "section": "other",
-    "unit": "км",
-    "qty_default": 0,
+    "unit": "усл",
+    "qty_default": 1,
     "price_net_default": 0,
     "price_vat_default": 0,
     "qty_manager": false,
     "price_manager": false,
-    "calc_type": "office_gazelle_amort",
-    "comment": "Ставка подставляется по офису менеджера"
+    "calc_type": "office_gazelle_amort_total",
+    "comment": "Административная ставка подставляется по офису менеджера"
   },
   {
+    "code": "o_dry_ice_purchase",
     "article": "Расходы на закупку сухого льда",
     "section": "other",
     "unit": "кг",
-    "qty_default": 300,
+    "qty_default": 30,
     "price_net_default": 0,
-    "price_vat_default": 90,
+    "price_vat_default": 110,
     "qty_manager": true,
     "price_manager": true,
     "calc_type": "direct_vat_price",
-    "comment": "Менеджерское поле"
+    "comment": "Менеджерское поле: количество и цена с НДС"
   },
   {
+    "code": "o_dry_ice_delivery",
     "article": "Расходы на доставку сухого льда в цех",
     "section": "other",
     "unit": "усл",
@@ -151,8 +242,8 @@
     "price_net_default": 1500,
     "price_vat_default": 0,
     "qty_manager": true,
-    "price_manager": false,
+    "price_manager": true,
     "calc_type": "direct",
-    "comment": "Количество вводит менеджер; цена административная"
+    "comment": "Менеджерское поле"
   }
 ]
