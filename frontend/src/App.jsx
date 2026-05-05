@@ -24,6 +24,12 @@ const plainNum = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 const officeNames = (settings) => (settings?.office_cities || ["Казань", "Москва"]).map((x) => (typeof x === "string" ? x : x.name)).filter(Boolean);
+const clampActionListWidth = (value) => Math.min(46, Math.max(24, Number(value) || 31));
+const savedActionListWidth = () => {
+  if (typeof window === "undefined") return null;
+  const stored = Number(window.localStorage.getItem("demos2sales.actionListWidthPct"));
+  return Number.isFinite(stored) && stored > 0 ? clampActionListWidth(stored) : null;
+};
 
 function useNotice() {
   const [notice, setNotice] = useState({ type: "", text: "" });
@@ -48,6 +54,7 @@ function App() {
   const [productSuggestions, setProductSuggestions] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [demoTab, setDemoTab] = useState("driver");
+  const [actionListWidth, setActionListWidth] = useState(savedActionListWidth);
   const [loginForm, setLoginForm] = useState({ login: "artur", password: "123" });
   const { notice, show, clear } = useNotice();
 
@@ -55,6 +62,7 @@ function App() {
   const appFont = settings?.font_family || "Arial";
   const detailKind = detail?.kind;
   const actionList = actions || [];
+  const resolvedActionListWidth = actionListWidth ?? clampActionListWidth(ui.action_list_width_pct || 31);
   const listTotals = useMemo(() => actionList.reduce((acc, item) => {
     const confirmed = item.is_director_confirmed ? Number(item.confirmed_amount ?? item.display_amount ?? 0) : 0;
     if (item.type === ACTION_SALE) acc.cash += confirmed;
@@ -65,7 +73,7 @@ function App() {
 
   const pageStyle = useMemo(() => ({
     fontFamily: appFont,
-    "--action-list-width": `${ui.action_list_width_pct || 31}%`,
+    "--action-list-width": `${resolvedActionListWidth}%`,
     "--criteria-name-width": `${ui.criteria_name_width_pct || 20}fr`,
     "--criteria-level-width": `${ui.criteria_levels_width_pct || 60}fr`,
     "--criteria-comment-width": `${ui.criteria_comment_width_pct || 20}fr`,
@@ -73,7 +81,27 @@ function App() {
     "--font-title": `${ui.font_title_px || 18}px`,
     "--card-padding": `${ui.card_padding_px || 10}px`,
     "--field-gap": `${ui.field_gap_px || 8}px`,
-  }), [appFont, ui]);
+  }), [appFont, resolvedActionListWidth, ui]);
+
+  const startPanelResize = (event) => {
+    if (event.button !== 0) return;
+    const layout = event.currentTarget.parentElement;
+    const rect = layout.getBoundingClientRect();
+    const onMove = (moveEvent) => {
+      const next = clampActionListWidth(((moveEvent.clientX - rect.left) / rect.width) * 100);
+      setActionListWidth(next);
+      window.localStorage.setItem("demos2sales.actionListWidthPct", String(next));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("is-resizing-panels");
+    };
+    event.preventDefault();
+    document.body.classList.add("is-resizing-panels");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  };
 
   const loadBootstrap = async (u = user, filter = managerFilter, hideOld = hideOldActions) => {
     if (!u) return;
@@ -395,6 +423,8 @@ function App() {
             </div>
           </aside>
 
+          <div className="panel-resizer" role="separator" aria-label="Изменить ширину списка действий" onPointerDown={startPanelResize} />
+
           <main className="detail-panel">
             {!editor || !detail ? <div className="empty-card">Выберите действие слева.</div> : (
               <>
@@ -642,7 +672,7 @@ function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSea
         <Kpi title="Суммарная премия за продажу [CASH_ALL]" value={money(calc.cash_all)} />
         <Kpi title="Сумма подтвержденная директором [CASH_ALL_CONFIRM]" value={money(editor.confirmed_amount)} />
       </div>
-      <div className="card">
+      <div className="card sale-products-card">
         <div className="card-head compact-row"><h3>Товары продажи</h3></div>
         <div className="sale-search-row">
           <input value={productSearch} disabled={readonly} onChange={(e) => setProductSearch(e.target.value)} placeholder="Начните вводить товар (от 3 символов)" />
@@ -664,7 +694,7 @@ function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSea
                   <td><input type="number" disabled={readonly} value={row.price_vat ?? 0} onChange={(e) => updateSaleRow(index, "price_vat", e.target.value)} /></td>
                   <td><input type="number" disabled={readonly} value={row.qty ?? 1} onChange={(e) => updateSaleRow(index, "qty", e.target.value)} /></td>
                   <td className="readonly-cell strong align-right">{money(row.cash_net)}</td>
-                  <td><div className="mini-actions"><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("up", index)}>↑</button><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("down", index)}>↓</button><button className="danger xs" disabled={readonly} onClick={() => saleRowCommand("delete", index)}>✕</button></div></td>
+                  <td><div className="mini-actions sale-row-actions"><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("up", index)}>↑</button><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("down", index)}>↓</button><button className="danger xs" disabled={readonly} onClick={() => saleRowCommand("delete", index)}>✕</button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -842,7 +872,7 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
       <div className="card">
         <div className="card-head compact-row">
           <h3>Справочник товаров</h3>
-          <div className="mini-actions"><select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select><a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать excel</a>{isDirector && <label className="ghost file-btn">Импорт excel<input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}{isDirector && <button className="primary" onClick={saveProducts}>Сохранить порядок</button>}</div>
+          <div className="mini-actions products-actions"><select className="city-select" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select><a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать excel</a>{isDirector && <label className="ghost file-btn">Импорт excel<input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}{isDirector && <button className="primary" onClick={saveProducts}>Сохранить порядок</button>}</div>
         </div>
         <div className="table-shell"><table className="dense-table"><thead><tr><th></th><th>Артикул</th><th>Наименование</th><th>Цена с НДС (прайс) [PR0]</th><th>Цена без НДС (прайс)</th><th>Маржа без НДС [MR]</th><th>Макс. премия NET [PR]</th><th>Ставка премии от маржи [ST]</th></tr></thead><tbody>
           {products.map((row, index) => {
