@@ -1,5 +1,4 @@
-
--- 01b_create_empty_schema_demo_calc_v6.2.sql
+-- 01b_create_empty_schema_demo_calc_v6_5.sql
 -- Выполнять после подключения к базе demo_calc.
 
 CREATE TABLE IF NOT EXISTS app_users (
@@ -7,27 +6,25 @@ CREATE TABLE IF NOT EXISTS app_users (
     password TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('director','manager')),
     name TEXT NOT NULL,
+    office_city TEXT NOT NULL DEFAULT 'Казань',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
 CREATE TABLE IF NOT EXISTS app_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,
     settings JSONB NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-
 CREATE TABLE IF NOT EXISTS products (
     product_id TEXT PRIMARY KEY,
+    row_order INTEGER NOT NULL DEFAULT 0,
     sku TEXT NOT NULL,
     name TEXT NOT NULL,
     price_vat NUMERIC(14,2) NOT NULL DEFAULT 0,
     price_net NUMERIC(14,2) NOT NULL DEFAULT 0,
-    min_price_net NUMERIC(14,2) NOT NULL DEFAULT 0,
-    margin_pct NUMERIC(8,6) NOT NULL DEFAULT 0.65,
+    city_params JSONB NOT NULL DEFAULT '{}'::jsonb,
     comment TEXT NOT NULL DEFAULT ''
 );
-
 CREATE TABLE IF NOT EXISTS actions (
     action_id TEXT PRIMARY KEY,
     action_type TEXT NOT NULL CHECK (action_type IN ('Проведенная демонстрация','Проданное оборудование','Выплата премии')),
@@ -39,6 +36,7 @@ CREATE TABLE IF NOT EXISTS actions (
     model TEXT NOT NULL DEFAULT '',
     task_description TEXT NOT NULL DEFAULT '',
     comment TEXT NOT NULL DEFAULT '',
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     is_director_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
     confirmed_amount NUMERIC(14,2),
     director_comment TEXT NOT NULL DEFAULT '',
@@ -46,7 +44,6 @@ CREATE TABLE IF NOT EXISTS actions (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(manager_login, sequence_no)
 );
-
 CREATE TABLE IF NOT EXISTS demo_expenses (
     id BIGSERIAL PRIMARY KEY,
     action_id TEXT NOT NULL REFERENCES actions(action_id) ON DELETE CASCADE,
@@ -61,7 +58,6 @@ CREATE TABLE IF NOT EXISTS demo_expenses (
     is_custom BOOLEAN NOT NULL DEFAULT FALSE,
     comment TEXT NOT NULL DEFAULT ''
 );
-
 CREATE TABLE IF NOT EXISTS demo_criterion_values (
     action_id TEXT NOT NULL REFERENCES actions(action_id) ON DELETE CASCADE,
     criterion_code TEXT NOT NULL,
@@ -69,7 +65,6 @@ CREATE TABLE IF NOT EXISTS demo_criterion_values (
     manager_comment TEXT NOT NULL DEFAULT '',
     PRIMARY KEY(action_id, criterion_code)
 );
-
 CREATE TABLE IF NOT EXISTS sale_rows (
     id BIGSERIAL PRIMARY KEY,
     action_id TEXT NOT NULL REFERENCES actions(action_id) ON DELETE CASCADE,
@@ -77,18 +72,30 @@ CREATE TABLE IF NOT EXISTS sale_rows (
     product_id TEXT NOT NULL REFERENCES products(product_id),
     sku TEXT NOT NULL,
     name TEXT NOT NULL,
+    pr0_vat NUMERIC(14,2) NOT NULL DEFAULT 0,
     price_vat NUMERIC(14,2) NOT NULL DEFAULT 0,
     price_net NUMERIC(14,2) NOT NULL DEFAULT 0,
     qty NUMERIC(14,4) NOT NULL DEFAULT 1,
     total_vat NUMERIC(14,2) NOT NULL DEFAULT 0,
     total_net NUMERIC(14,2) NOT NULL DEFAULT 0,
     vat_sum NUMERIC(14,2) NOT NULL DEFAULT 0,
-    min_price_net NUMERIC(14,2) NOT NULL DEFAULT 0,
-    margin_unit NUMERIC(14,2) NOT NULL DEFAULT 0,
-    margin_pct NUMERIC(8,6) NOT NULL DEFAULT 0.65,
-    bonus_net NUMERIC(14,2) NOT NULL DEFAULT 0
+    mr_unit NUMERIC(14,2) NOT NULL DEFAULT 0,
+    pr_unit NUMERIC(14,2) NOT NULL DEFAULT 0,
+    st_pct NUMERIC(8,6) NOT NULL DEFAULT 0,
+    cash_net NUMERIC(14,2) NOT NULL DEFAULT 0
 );
 
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS office_city TEXT NOT NULL DEFAULT 'Казань';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS row_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS city_params JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE actions ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS pr0_vat NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS mr_unit NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS pr_unit NUMERIC(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS st_pct NUMERIC(8,6) NOT NULL DEFAULT 0;
+ALTER TABLE sale_rows ADD COLUMN IF NOT EXISTS cash_net NUMERIC(14,2) NOT NULL DEFAULT 0;
+
+DROP VIEW IF EXISTS v_actions_with_lock;
 CREATE OR REPLACE VIEW v_actions_with_lock AS
 SELECT
     a.*,

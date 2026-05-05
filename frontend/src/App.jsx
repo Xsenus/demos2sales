@@ -5,7 +5,7 @@ const ACTION_DEMO = "Проведенная демонстрация";
 const ACTION_SALE = "Проданное оборудование";
 const ACTION_PREMIUM = "Выплата премии";
 
-const clone = (v) => JSON.parse(JSON.stringify(v));
+const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const money = (v) => `${Number(v || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 const money0 = (v) => `${Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
 const percent = (v) => `${(Number(v || 0) * 100).toFixed(1)}%`;
@@ -23,6 +23,7 @@ const plainNum = (v) => {
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 };
+const officeNames = (settings) => (settings?.office_cities || ["Казань", "Москва"]).map((x) => (typeof x === "string" ? x : x.name)).filter(Boolean);
 
 function useNotice() {
   const [notice, setNotice] = useState({ type: "", text: "" });
@@ -36,6 +37,7 @@ function App() {
   const [managerFilter, setManagerFilter] = useState("__all__");
   const [mainTab, setMainTab] = useState("actions");
   const [actions, setActions] = useState([]);
+  const [hideOldActions, setHideOldActions] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [editor, setEditor] = useState(null);
@@ -45,17 +47,25 @@ function App() {
   const [productSearch, setProductSearch] = useState("");
   const [productSuggestions, setProductSuggestions] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState("");
-  const [demoTab, setDemoTab] = useState("calc");
+  const [demoTab, setDemoTab] = useState("driver");
   const [loginForm, setLoginForm] = useState({ login: "artur", password: "123" });
   const { notice, show, clear } = useNotice();
 
   const ui = settings?.ui || {};
   const appFont = settings?.font_family || "Arial";
   const detailKind = detail?.kind;
+  const actionList = actions || [];
+  const listTotals = useMemo(() => actionList.reduce((acc, item) => {
+    const confirmed = item.is_director_confirmed ? Number(item.confirmed_amount ?? item.display_amount ?? 0) : 0;
+    if (item.type === ACTION_SALE) acc.cash += confirmed;
+    if (item.type === ACTION_DEMO) acc.vic += confirmed;
+    if (item.type === ACTION_PREMIUM) acc.profit += confirmed;
+    return acc;
+  }, { profit: 0, cash: 0, vic: 0 }), [actionList]);
 
   const pageStyle = useMemo(() => ({
     fontFamily: appFont,
-    "--action-list-width": `${ui.action_list_width_pct || 28}%`,
+    "--action-list-width": `${ui.action_list_width_pct || 31}%`,
     "--criteria-name-width": `${ui.criteria_name_width_pct || 20}fr`,
     "--criteria-level-width": `${ui.criteria_levels_width_pct || 60}fr`,
     "--criteria-comment-width": `${ui.criteria_comment_width_pct || 20}fr`,
@@ -65,11 +75,11 @@ function App() {
     "--field-gap": `${ui.field_gap_px || 8}px`,
   }), [appFont, ui]);
 
-  const loadBootstrap = async (u = user, filter = managerFilter) => {
+  const loadBootstrap = async (u = user, filter = managerFilter, hideOld = hideOldActions) => {
     if (!u) return;
     setLoading(true);
     try {
-      const data = await api.bootstrap(u.login, filter);
+      const data = await api.bootstrap(u.login, filter, hideOld);
       setManagerChoices(data.manager_choices || []);
       setSettings(data.settings);
       setActions(data.actions || []);
@@ -89,10 +99,8 @@ function App() {
   };
 
   useEffect(() => {
-    if (user) {
-      loadBootstrap(user, managerFilter);
-    }
-  }, [user, managerFilter]);
+    if (user) loadBootstrap(user, managerFilter, hideOldActions);
+  }, [user, managerFilter, hideOldActions]);
 
   useEffect(() => {
     if (user && selectedActionId) {
@@ -100,7 +108,7 @@ function App() {
         .then((res) => {
           setDetail(res);
           setEditor(clone(res.action));
-          if (res.kind !== "demo") setDemoTab("calc");
+          if (res.kind !== "demo") setDemoTab("driver");
         })
         .catch((e) => show(e.message, "error"));
     } else {
@@ -112,7 +120,7 @@ function App() {
   useEffect(() => {
     if (!user || productSearch.trim().length < 3 || detailKind !== "sale") {
       setProductSuggestions([]);
-      return;
+      return undefined;
     }
     const h = setTimeout(() => {
       api.searchProducts(user.login, productSearch).then((res) => {
@@ -124,7 +132,6 @@ function App() {
 
   useEffect(() => {
     if (!user || !editor?.id || !detailKind || !["demo", "sale"].includes(detailKind)) return undefined;
-
     let payload = null;
     if (detailKind === "demo") {
       payload = {
@@ -134,6 +141,7 @@ function App() {
         model: editor.model,
         task_description: editor.task_description,
         comment: editor.comment,
+        demo_meta: editor.demo_meta || {},
         expenses: editor.expenses || [],
         criteria: editor.criteria || {},
       };
@@ -146,21 +154,13 @@ function App() {
         rows: editor.rows || [],
       };
     }
-    if (!payload) return undefined;
-
     let cancelled = false;
     const h = setTimeout(() => {
       api.previewAction(user.login, editor.id, payload)
-        .then((res) => {
-          if (!cancelled) setDetail(res);
-        })
+        .then((res) => { if (!cancelled) setDetail(res); })
         .catch(() => {});
     }, 250);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(h);
-    };
+    return () => { cancelled = true; clearTimeout(h); };
   }, [editor, user, detailKind]);
 
   const onLogin = async (e) => {
@@ -177,7 +177,7 @@ function App() {
 
   const refreshActionsOnly = async (keepId = selectedActionId) => {
     if (!user) return;
-    const res = await api.actions(user.login, managerFilter);
+    const res = await api.actions(user.login, managerFilter, hideOldActions);
     setActions(res.items || []);
     if (keepId && res.items?.find((a) => a.id === keepId)) setSelectedActionId(keepId);
     else setSelectedActionId(res.items?.[0]?.id || null);
@@ -208,23 +208,23 @@ function App() {
     }
   };
 
-  const moveCurrentAction = async (direction) => {
-    if (!user || !editor?.id) return;
+  const moveActionById = async (actionId, direction) => {
+    if (!user || !actionId) return;
     try {
-      await api.moveAction(user.login, editor.id, direction);
-      await refreshActionsOnly(editor.id);
+      await api.moveAction(user.login, actionId, direction);
+      await refreshActionsOnly(actionId);
       show("Порядок действий обновлен", "success");
     } catch (e) {
       show(e.message, "error");
     }
   };
 
-  const deleteCurrentAction = async () => {
-    if (!user || !editor?.id) return;
+  const deleteActionById = async (actionId) => {
+    if (!user || !actionId) return;
     if (!window.confirm("Удалить действие?")) return;
     try {
-      await api.deleteAction(user.login, editor.id);
-      await refreshActionsOnly(null);
+      await api.deleteAction(user.login, actionId);
+      await refreshActionsOnly(actionId === selectedActionId ? null : selectedActionId);
       show("Действие удалено", "success");
     } catch (e) {
       show(e.message, "error");
@@ -259,20 +259,6 @@ function App() {
     }
   };
 
-  const demoExpenseCommand = async (command, index = 0) => {
-    if (!editor?.id || !user) return;
-    try {
-      const res = command === "add"
-        ? await api.addDemoExpenseRow(user.login, editor.id)
-        : await api.demoExpenseCommand(user.login, editor.id, command, index);
-      setDetail(res);
-      setEditor(clone(res.action));
-      await refreshActionsOnly(editor.id);
-    } catch (e) {
-      show(e.message, "error");
-    }
-  };
-
   const saveProducts = async () => {
     if (!user) return;
     try {
@@ -290,6 +276,7 @@ function App() {
       const res = await api.saveSettings(user.login, settings);
       setSettings(res.settings);
       show("Настройки сохранены", "success");
+      await loadBootstrap(user, managerFilter, hideOldActions);
     } catch (e) {
       show(e.message, "error");
     }
@@ -300,45 +287,29 @@ function App() {
     try {
       const res = await api.importProducts(user.login, file);
       setProducts(res.items || []);
-      show(`Импортировано товаров: ${res.count}`, "success");
+      show(res.message || `Импортировано товаров: ${res.count}`, "success");
     } catch (e) {
       show(e.message, "error");
     }
   };
 
-  const updateEditorField = (field, value) => {
-    setEditor((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateDirectorFields = (field, value) => {
-    setEditor((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateSaleRow = (index, field, value) => {
-    setEditor((prev) => {
-      const rows = clone(prev.rows || []);
-      rows[index] = { ...rows[index], [field]: value };
-      return { ...prev, rows };
-    });
-  };
-
-  const updateExpenseRow = (index, field, value) => {
-    setEditor((prev) => {
-      const rows = clone(prev.expenses || []);
-      rows[index] = { ...rows[index], [field]: value };
-      return { ...prev, expenses: rows };
-    });
-  };
-
-  const updateCriterion = (code, patch) => {
-    setEditor((prev) => ({
-      ...prev,
-      criteria: {
-        ...(prev.criteria || {}),
-        [code]: { ...(prev.criteria?.[code] || {}), ...patch },
-      },
-    }));
-  };
+  const updateEditorField = (field, value) => setEditor((prev) => ({ ...prev, [field]: value }));
+  const updateDirectorFields = (field, value) => setEditor((prev) => ({ ...prev, [field]: value }));
+  const updateDemoMeta = (field, value) => setEditor((prev) => ({ ...prev, demo_meta: { ...(prev.demo_meta || {}), [field]: value } }));
+  const updateSaleRow = (index, field, value) => setEditor((prev) => {
+    const rows = clone(prev.rows || []);
+    rows[index] = { ...rows[index], [field]: value };
+    return { ...prev, rows };
+  });
+  const updateExpenseRow = (index, field, value) => setEditor((prev) => {
+    const rows = clone(prev.expenses || []);
+    rows[index] = { ...rows[index], [field]: value };
+    return { ...prev, expenses: rows };
+  });
+  const updateCriterion = (code, patch) => setEditor((prev) => ({
+    ...prev,
+    criteria: { ...(prev.criteria || {}), [code]: { ...(prev.criteria?.[code] || {}), ...patch } },
+  }));
 
   if (!user) {
     return (
@@ -368,11 +339,11 @@ function App() {
       <header className="header-bar">
         <div>
           <div className="brand-title">ИРБИСТЕХ — демонстрации, продажи и премии</div>
-          <div className="muted compact">Компактный интерфейс на React + FastAPI</div>
+          <div className="muted compact">Внутренняя система демонстраций, продаж и подтверждения премий</div>
         </div>
         <div className="header-user">
           <div>{user.name}</div>
-          <div className="muted compact">{user.role === "director" ? "Директор" : "Менеджер"}</div>
+          <div className="muted compact">{user.role === "director" ? "Директор" : `Менеджер · ${user.office_city || ""}`}</div>
         </div>
       </header>
 
@@ -394,48 +365,53 @@ function App() {
                 <select value={managerFilter} onChange={(e) => setManagerFilter(e.target.value)}>
                   {managerChoices.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
-              ) : (
-                <div className="muted compact">{user.name}</div>
-              )}
+              ) : <div className="muted compact">{user.name}</div>}
             </div>
             <div className="toolbar-grid">
               <button className="ghost" onClick={() => createAction(ACTION_DEMO)}>+ Демо</button>
               <button className="ghost" onClick={() => createAction(ACTION_SALE)}>+ Продажа</button>
               <button className="ghost" onClick={() => createAction(ACTION_PREMIUM)}>+ Премия</button>
             </div>
+            <label className="checkbox-row small-check">
+              <input type="checkbox" checked={hideOldActions} onChange={(e) => setHideOldActions(e.target.checked)} />
+              <span>Скрыть старые действия</span>
+            </label>
+            <div className="list-totals">
+              <Kpi title="[PROFIT]" value={money0(listTotals.profit)} />
+              <Kpi title="[CASH_ALL_CONFIRM]" value={money0(listTotals.cash)} />
+              <Kpi title="[VIC_CONFIRM]" value={money0(listTotals.vic)} />
+            </div>
             <div className="action-list">
-              {actions.map((item) => (
-                <button key={item.id} className={`action-card ${selectedActionId === item.id ? "selected" : ""} ${cardClass(item)}`} onClick={() => setSelectedActionId(item.id)}>
-                  <div className="line1">{item.line1}</div>
-                  <div className="line2">{item.line2}</div>
-                </button>
+              {actionList.map((item) => (
+                <div key={item.id} className={`action-card ${selectedActionId === item.id ? "selected" : ""} ${cardClass(item)}`} onClick={() => setSelectedActionId(item.id)} role="button" tabIndex={0}>
+                  <div className="action-title-one-line">{item.line1}</div>
+                  <div className="action-title-buttons">
+                    <button className="ghost icon-btn" title="Выше" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "up"); }}>↑</button>
+                    <button className="ghost icon-btn" title="Ниже" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "down"); }}>↓</button>
+                    {user.role === "director" && <button className="danger icon-btn" title="Удалить" onClick={(e) => { e.stopPropagation(); deleteActionById(item.id); }}>×</button>}
+                  </div>
+                </div>
               ))}
             </div>
           </aside>
 
           <main className="detail-panel">
-            {!editor || !detail ? (
-              <div className="empty-card">Выберите действие слева.</div>
-            ) : (
+            {!editor || !detail ? <div className="empty-card">Выберите действие слева.</div> : (
               <>
-                <div className="detail-toolbar">
-                  <div className="toolbar-group">
-                    <button className="ghost" onClick={() => moveCurrentAction("up")}>↑ Выше</button>
-                    <button className="ghost" onClick={() => moveCurrentAction("down")}>↓ Ниже</button>
-                    {user.role === "director" && <button className="danger" onClick={deleteCurrentAction}>Удалить</button>}
-                  </div>
-                  <button className="primary" onClick={saveCurrentAction}>Сохранить</button>
-                </div>
-
-                <div className="card confirm-row">
-                  <label className="checkbox-row">
-                    <input type="checkbox" checked={!!editor.is_director_confirmed} disabled={user.role !== "director"} onChange={(e) => updateDirectorFields("is_director_confirmed", e.target.checked)} />
+                <div className="detail-toolbar"><button className="primary" onClick={saveCurrentAction}>Сохранить</button></div>
+                <div className="card confirm-row one-line-confirm">
+                  <label className="checkbox-row nowrap">
+                    <input type="checkbox" checked={!!editor.is_director_confirmed} disabled={user.role !== "director" || editor.is_locked} onChange={(e) => updateDirectorFields("is_director_confirmed", e.target.checked)} />
                     <span>Подтверждено директором</span>
                   </label>
-                  <div className="confirm-grid">
-                    <input type="number" value={editor.confirmed_amount ?? ""} onChange={(e) => updateDirectorFields("confirmed_amount", e.target.value)} placeholder="Сумма, подтвержденная директором" disabled={user.role !== "director"} />
-                    <input value={editor.director_comment || ""} onChange={(e) => updateDirectorFields("director_comment", e.target.value)} placeholder="Комментарий директора" disabled={user.role !== "director"} />
-                  </div>
+                  <label className="field-stack compact-field">
+                    <span>{detailKind === "demo" ? "[VIC_CONFIRM]" : detailKind === "sale" ? "[CASH_ALL_CONFIRM]" : "[PROFIT_CONFIRM]"}</span>
+                    <input type="number" value={editor.confirmed_amount ?? ""} onChange={(e) => updateDirectorFields("confirmed_amount", e.target.value)} placeholder="Сумма" disabled={user.role !== "director" || editor.is_locked} />
+                  </label>
+                  <label className="field-stack compact-field wide-field">
+                    <span>Комментарий директора</span>
+                    <input value={editor.director_comment || ""} onChange={(e) => updateDirectorFields("director_comment", e.target.value)} placeholder="Комментарий" disabled={user.role !== "director" || editor.is_locked} />
+                  </label>
                 </div>
 
                 {detailKind === "demo" && (
@@ -444,11 +420,10 @@ function App() {
                     editor={editor}
                     demoTab={demoTab}
                     setDemoTab={setDemoTab}
-                    setEditor={setEditor}
                     updateEditorField={updateEditorField}
+                    updateDemoMeta={updateDemoMeta}
                     updateExpenseRow={updateExpenseRow}
                     updateCriterion={updateCriterion}
-                    demoExpenseCommand={demoExpenseCommand}
                     settings={settings}
                     user={user}
                   />
@@ -466,123 +441,94 @@ function App() {
                     setSelectedProductId={setSelectedProductId}
                     addProductToSale={addProductToSale}
                     saleRowCommand={saleRowCommand}
+                    user={user}
                   />
                 )}
-                {detailKind === "premium" && (
-                  <PremiumView detail={detail} editor={editor} updateEditorField={updateEditorField} />
-                )}
+                {detailKind === "premium" && <PremiumView detail={detail} editor={editor} updateEditorField={updateEditorField} user={user} />}
               </>
             )}
           </main>
         </div>
       )}
 
-      {mainTab === "settings" && settings && (
-        <SettingsView user={user} settings={settings} setSettings={setSettings} saveSettings={saveSettings} />
-      )}
-
-      {mainTab === "products" && (
-        <ProductsView user={user} products={products} setProducts={setProducts} saveProducts={saveProducts} importProducts={importProducts} />
-      )}
+      {mainTab === "settings" && settings && <SettingsView user={user} settings={settings} setSettings={setSettings} saveSettings={saveSettings} />}
+      {mainTab === "products" && <ProductsView user={user} settings={settings} products={products} setProducts={setProducts} saveProducts={saveProducts} importProducts={importProducts} />}
     </div>
   );
 }
 
-function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, updateExpenseRow, updateCriterion, demoExpenseCommand, settings, user }) {
+function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, updateDemoMeta, updateExpenseRow, updateCriterion, settings, user }) {
   const calc = detail.calc || {};
   const expenseMap = useMemo(() => Object.fromEntries((settings?.expense_settings || []).map((row) => [row.article, row])), [settings]);
   const criteriaBlocks = detail.criteria_blocks || { P: [], R: [], M: [] };
-
+  const readonly = !!editor.is_locked || (user.role !== "director" && !!editor.is_director_confirmed);
+  const demoHours = editor.demo_meta?.demo_hours ?? 8;
   return (
     <div className="stack-gap">
-      <div className="card fields-grid four">
-        <input value={editor.date || ""} onChange={(e) => updateEditorField("date", e.target.value)} placeholder="Дата" />
-        <input value={editor.client || ""} onChange={(e) => updateEditorField("client", e.target.value)} placeholder="Клиент" />
-        <input value={editor.city || ""} onChange={(e) => updateEditorField("city", e.target.value)} placeholder="Город" />
-        <input value={editor.model || ""} onChange={(e) => updateEditorField("model", e.target.value)} placeholder="Модель" />
-        <textarea className="span-4" value={editor.task_description || ""} onChange={(e) => updateEditorField("task_description", e.target.value)} placeholder="Задача очистки" />
-        <textarea className="span-4" value={editor.comment || ""} onChange={(e) => updateEditorField("comment", e.target.value)} placeholder="Комментарий менеджера" />
+      <div className="card fields-grid compact-info-grid">
+        <Field label="Дата"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
+        <Field label="Клиент"><input value={editor.client || ""} disabled={readonly} onChange={(e) => updateEditorField("client", e.target.value)} /></Field>
+        <Field label="Город демонстрации"><input value={editor.city || ""} disabled={readonly} onChange={(e) => updateEditorField("city", e.target.value)} /></Field>
+        <Field label="Офис менеджера"><input value={editor.manager_office_city || ""} readOnly /></Field>
+        <Field label="Модель"><input value={editor.model || ""} disabled={readonly} onChange={(e) => updateEditorField("model", e.target.value)} /></Field>
+        <Field label="Описание задачи" className="span-2"><textarea value={editor.task_description || ""} disabled={readonly} onChange={(e) => updateEditorField("task_description", e.target.value)} /></Field>
+        <Field label="Комментарий менеджера" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
+      </div>
+
+      <div className="card demo-hours-row">
+        <Field label="Время работы демонстратором, ч">
+          <input type="number" value={demoHours} disabled={readonly} onChange={(e) => updateDemoMeta("demo_hours", e.target.value)} />
+        </Field>
+        <div className="muted compact">Поле используется в «Расчетах с водителем» и в Части 1 сметы демонстрации.</div>
       </div>
 
       <div className="sub-tabs">
-        <TabButton active={demoTab === "calc"} onClick={() => setDemoTab("calc")}>Калькулятор</TabButton>
+        <TabButton active={demoTab === "driver"} onClick={() => setDemoTab("driver")}>Расчеты с водителем</TabButton>
+        <TabButton active={demoTab === "estimate"} onClick={() => setDemoTab("estimate")}>Смета демонстрации</TabButton>
+        <TabButton active={demoTab === "deduction"} onClick={() => setDemoTab("deduction")}>Расчет вычета</TabButton>
         <TabButton active={demoTab === "P"} onClick={() => setDemoTab("P")}>P — Подготовка</TabButton>
         <TabButton active={demoTab === "R"} onClick={() => setDemoTab("R")}>R — Результат</TabButton>
         <TabButton active={demoTab === "M"} onClick={() => setDemoTab("M")}>M — Управленческий фактор</TabButton>
       </div>
 
-      {demoTab === "calc" && (
+      {demoTab === "driver" && <DriverSettlement calc={calc} />}
+      {demoTab === "estimate" && (
         <div className="stack-gap">
-          <div className="kpi-grid compact-kpi">
-            <Kpi title="Итого с НДС" value={money(calc.total_vat)} />
-            <Kpi title="Помощь ООО" value={money(calc.support_vat)} />
-            <Kpi title="COST" value={money(calc.cost_net)} />
-            <Kpi title="QI" value={Number(calc.QI || 0).toFixed(3)} />
-            <Kpi title="K" value={percent(calc.K)} />
-            <Kpi title="Вычет NET" value={money(calc.deduction_net)} />
-          </div>
-          <div className="card">
-            <div className="card-head compact-row">
-              <h3>Смета демонстрации</h3>
-              <button className="ghost" onClick={() => demoExpenseCommand("add")}>+ Пользовательская строка</button>
-            </div>
-            <div className="table-shell">
-              <table className="dense-table">
-                <thead>
-                  <tr>
-                    <th>Статья</th>
-                    <th>Кол-во</th>
-                    <th>Ед.</th>
-                    <th>Цена без НДС</th>
-                    <th>Цена с НДС</th>
-                    <th>Сумма с НДС</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(editor.expenses || []).map((row, index) => {
-                    const conf = expenseMap[row.article] || {};
-                    const canQty = row.is_custom || conf.qty_manager;
-                    const canPrice = row.is_custom || conf.price_manager;
-                    return (
-                      <tr key={`${row.article}-${index}`}>
-                        <td>
-                          <div className="row-title">{row.article}</div>
-                          <div className="muted tiny">{row.comment}</div>
-                        </td>
-                        <td><input type="number" value={row.qty ?? 0} disabled={!canQty} onChange={(e) => updateExpenseRow(index, "qty", e.target.value)} /></td>
-                        <td><input value={row.unit || ""} disabled={!row.is_custom} onChange={(e) => updateExpenseRow(index, "unit", e.target.value)} /></td>
-                        <td><input type="number" value={row.price_net ?? 0} disabled={!canPrice} onChange={(e) => updateExpenseRow(index, "price_net", e.target.value)} /></td>
-                        <td><input type="number" value={row.price_vat ?? 0} disabled={!canPrice} onChange={(e) => updateExpenseRow(index, "price_vat", e.target.value)} /></td>
-                        <td className="align-right strong">{money(row.amount_vat)}</td>
-                        <td>
-                          <div className="mini-actions">
-                            <button className="ghost xs" onClick={() => demoExpenseCommand("up", index)}>↑</button>
-                            <button className="ghost xs" onClick={() => demoExpenseCommand("down", index)}>↓</button>
-                            <button className="danger xs" onClick={() => demoExpenseCommand("delete", index)}>✕</button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+          <ExpenseSection
+            title="Часть 1. Статья расходов по совместителю водителю-демонстратору (ГПХ, ПНД)"
+            rows={(editor.expenses || []).filter((row) => row.section === "driver")}
+            allRows={editor.expenses || []}
+            expenseMap={expenseMap}
+            updateExpenseRow={updateExpenseRow}
+            readonly={readonly}
+          />
+          <ExpenseSection
+            title="Часть 2. Другие статьи расходов ООО ИРБИСТЕХ"
+            rows={(editor.expenses || []).filter((row) => row.section !== "driver")}
+            allRows={editor.expenses || []}
+            expenseMap={expenseMap}
+            updateExpenseRow={updateExpenseRow}
+            readonly={readonly}
+          />
+          <div className="card totals-card">
+            <Kpi title="ИТОГО расходы на демонстрацию, руб. с НДС" value={money(calc.total_vat)} />
+            <Kpi title="ИТОГО расходы на демонстрацию [DEMO_COST], руб. без НДС" value={money(calc.demo_cost_net)} />
           </div>
         </div>
       )}
-
+      {demoTab === "deduction" && <DeductionTab calc={calc} confirmed={editor.confirmed_amount} />}
       {["P", "R", "M"].includes(demoTab) && (
         <div className="card">
-          <div className="criteria-grid-head">
-            <div>Критерий</div>
-            <div>Уровни</div>
-            <div>Комментарий</div>
+          <div className="criteria-tab-head">
+            <h3>{demoTab === "P" ? "P — Подготовка" : demoTab === "R" ? "R — Результат" : "M — Управленческий фактор"}</h3>
+            <Kpi title={`x${demoTab}`} value={Number(calc[`x${demoTab}`] || 0).toFixed(3)} />
           </div>
+          <div className="criteria-grid-head"><div>Критерий</div><div>Уровни</div><div>Комментарий менеджера</div></div>
           {(criteriaBlocks[demoTab] || []).map((criterion) => (
             <CriterionRow
               key={criterion.code}
               criterion={criterion}
+              readonly={readonly}
               editorValue={editor.criteria?.[criterion.code] || { level_index: 0, manager_comment: "" }}
               onLevel={(levelIndex) => updateCriterion(criterion.code, { level_index: levelIndex })}
               onComment={(value) => updateCriterion(criterion.code, { manager_comment: value })}
@@ -594,331 +540,327 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
   );
 }
 
-function CriterionRow({ criterion, editorValue, onLevel, onComment }) {
+function DriverSettlement({ calc }) {
   return (
-    <div className="criterion-row">
-      <div className="criterion-about">
-        <div className="criterion-code">{criterion.code}</div>
-        <div className="criterion-title">{criterion.title}</div>
-        <div className="criterion-desc">{criterion.desc}</div>
-      </div>
-      <div className="criterion-levels">
-        {criterion.levels.map((level, idx) => (
-          <button key={`${criterion.code}-${idx}`} className={`level-box ${editorValue.level_index === idx ? "active" : ""}`} onClick={() => onLevel(idx)}>
-            <span>{level[0]}</span>
-            <b>[{level[1]}]</b>
-          </button>
-        ))}
-      </div>
-      <div className="criterion-comment"><textarea value={editorValue.manager_comment || ""} onChange={(e) => onComment(e.target.value)} placeholder="Подтверждение уровня" /></div>
-    </div>
-  );
-}
-
-function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSearch, setProductSearch, productSuggestions, selectedProductId, setSelectedProductId, addProductToSale, saleRowCommand }) {
-  const calc = detail.calc || {};
-  return (
-    <div className="stack-gap">
-      <div className="card fields-grid three">
-        <input value={editor.date || ""} onChange={(e) => updateEditorField("date", e.target.value)} placeholder="Дата продажи" />
-        <input value={editor.client || ""} onChange={(e) => updateEditorField("client", e.target.value)} placeholder="Клиент" />
-        <textarea className="span-3" value={editor.comment || ""} onChange={(e) => updateEditorField("comment", e.target.value)} placeholder="Комментарий" />
-      </div>
-      <div className="kpi-grid compact-kpi">
-        <Kpi title="Итого с НДС" value={money(calc.total_vat)} />
-        <Kpi title="Премия NET" value={money(calc.bonus_net)} />
-      </div>
-      <div className="card">
-        <div className="card-head compact-row"><h3>Товары продажи</h3></div>
-        <div className="sale-search-row">
-          <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)} placeholder="Начните вводить товар (от 3 символов)" />
-          <select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)}>
-            <option value="">Выберите товар</option>
-            {productSuggestions.map((item) => (
-              <option key={item.product_id} value={item.product_id}>{item.sku} — {item.name}</option>
-            ))}
-          </select>
-          <button className="primary" onClick={addProductToSale}>Добавить товар</button>
-        </div>
-        <div className="table-shell">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>Артикул</th>
-                <th>Наименование</th>
-                <th>Цена с НДС</th>
-                <th>Цена без НДС</th>
-                <th>Кол-во</th>
-                <th>Мин. цена</th>
-                <th>% премии</th>
-                <th>Премия NET</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(editor.rows || []).map((row, index) => (
-                <tr key={`${row.product_id}-${index}`}>
-                  <td>{row.sku}</td>
-                  <td>{row.name}</td>
-                  <td><input type="number" value={row.price_vat ?? 0} onChange={(e) => updateSaleRow(index, "price_vat", e.target.value)} /></td>
-                  <td><input type="number" value={row.price_net ?? 0} onChange={(e) => updateSaleRow(index, "price_net", e.target.value)} /></td>
-                  <td><input type="number" value={row.qty ?? 1} onChange={(e) => updateSaleRow(index, "qty", e.target.value)} /></td>
-                  <td className="readonly-cell">{money(row.min_price_net)}</td>
-                  <td className="readonly-cell">{percent(row.margin_pct)}</td>
-                  <td className="readonly-cell strong">{money(row.bonus_net)}</td>
-                  <td>
-                    <div className="mini-actions">
-                      <button className="ghost xs" onClick={() => saleRowCommand("up", index)}>↑</button>
-                      <button className="ghost xs" onClick={() => saleRowCommand("down", index)}>↓</button>
-                      <button className="danger xs" onClick={() => saleRowCommand("delete", index)}>✕</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PremiumView({ detail, editor, updateEditorField }) {
-  const calc = detail.calc || {};
-  return (
-    <div className="stack-gap">
-      <div className="card fields-grid three">
-        <input value={editor.date || ""} onChange={(e) => updateEditorField("date", e.target.value)} placeholder="Дата премии" />
-        <input value={`${calc.period_from_seq || 0} → ${calc.period_to_seq || 0}`} readOnly />
-        <textarea className="span-3" value={editor.comment || ""} onChange={(e) => updateEditorField("comment", e.target.value)} placeholder="Комментарий" />
-      </div>
-      <div className="kpi-grid compact-kpi">
-        <Kpi title="Премия от продаж" value={money(calc.sales_sum)} />
-        <Kpi title="Демо-вычет" value={money(calc.actual_demo)} />
-        <Kpi title="К выплате" value={money(calc.payout)} />
-      </div>
-      {calc.warning ? <div className="warning-box">{calc.warning}</div> : null}
-      <div className="card">
-        <h3>Продажи периода</h3>
-        <SimpleTable rows={calc.sale_rows || []} />
-      </div>
-      <div className="card">
-        <h3>Демонстрации периода</h3>
-        <SimpleTable rows={calc.demo_rows || []} />
-      </div>
-    </div>
-  );
-}
-
-function SettingsView({ user, settings, setSettings, saveSettings }) {
-  const isDirector = user.role === "director";
-  const setField = (path, value) => {
-    setSettings((prev) => {
-      const next = clone(prev);
-      const parts = path.split(".");
-      let cursor = next;
-      for (let i = 0; i < parts.length - 1; i += 1) cursor = cursor[parts[i]];
-      cursor[parts.at(-1)] = value;
-      return next;
-    });
-  };
-  const updateExpense = (index, field, value) => {
-    setSettings((prev) => {
-      const next = clone(prev);
-      next.expense_settings[index][field] = value;
-      return next;
-    });
-  };
-  const updateCriterionScore = (cIndex, lIndex, score) => {
-    setSettings((prev) => {
-      const next = clone(prev);
-      next.criteria[cIndex].levels[lIndex][1] = score;
-      return next;
-    });
-  };
-
-  return (
-    <div className="stack-gap">
-      <div className="card">
-        <div className="card-head compact-row">
-          <h3>Бизнес-настройки</h3>
-          {isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}
-        </div>
-        <div className="fields-grid two">
-          <label className="field-stack">
-            <span>НДС, %</span>
-            <input type="number" value={pctUi(settings.vat_rate)} disabled={!isDirector} onChange={(e) => setField("vat_rate", fromPctUi(e.target.value))} />
-          </label>
-          <label className="field-stack">
-            <span>Ставка премии, %</span>
-            <input type="number" value={pctUi(settings.bonus_rate)} disabled={!isDirector} onChange={(e) => setField("bonus_rate", fromPctUi(e.target.value))} />
-          </label>
-          <label className="field-stack">
-            <span>Максимальный вычет из премии, %</span>
-            <input type="number" value={pctUi(settings.max_demo_deduction_pct)} disabled={!isDirector} onChange={(e) => setField("max_demo_deduction_pct", fromPctUi(e.target.value))} />
-          </label>
-          <label className="field-stack">
-            <span>Фора / помощь ООО, руб. с НДС</span>
-            <input type="number" value={settings.company_support_vat} disabled={!isDirector} onChange={(e) => setField("company_support_vat", plainNum(e.target.value))} />
-          </label>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-head compact-row">
-          <h3>Настройки интерфейса</h3>
-          {isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}
-        </div>
-        <div className="fields-grid two">
-          <label className="field-stack">
-            <span>Ширина списка действий, %</span>
-            <input type="number" value={settings.ui.action_list_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.action_list_width_pct", plainNum(e.target.value))} />
-          </label>
-          <label className="field-stack">
-            <span>Ширина колонки "Критерий", %</span>
-            <input type="number" value={settings.ui.criteria_name_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_name_width_pct", plainNum(e.target.value))} />
-          </label>
-          <label className="field-stack">
-            <span>Ширина колонки "Уровни", %</span>
-            <input type="number" value={settings.ui.criteria_levels_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_levels_width_pct", plainNum(e.target.value))} />
-          </label>
-          <label className="field-stack">
-            <span>Ширина колонки "Комментарий", %</span>
-            <input type="number" value={settings.ui.criteria_comment_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_comment_width_pct", plainNum(e.target.value))} />
-          </label>
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-head compact-row"><h3>Критерии и баллы</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
-        <div className="table-shell">
-          <table className="dense-table">
-            <thead><tr><th>Код</th><th>Блок</th><th>Критерий</th><th>Уровни и баллы</th></tr></thead>
-            <tbody>
-              {settings.criteria.map((criterion, cIndex) => (
-                <tr key={criterion.code}>
-                  <td>{criterion.code}</td>
-                  <td>{criterion.block}</td>
-                  <td><div className="row-title">{criterion.title}</div><div className="muted tiny">{criterion.desc}</div></td>
-                  <td>
-                    <div className="levels-editor">
-                      {criterion.levels.map((level, lIndex) => (
-                        <div key={`${criterion.code}-${lIndex}`} className="level-edit-box">
-                          <div className="muted tiny">{level[0]}</div>
-                          <input type="number" disabled={!isDirector} value={level[1]} onChange={(e) => updateCriterionScore(cIndex, lIndex, Number(e.target.value || 0))} />
-                        </div>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-head compact-row"><h3>Настройки сметы демонстрации</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
-        <div className="table-shell">
-          <table className="dense-table">
-            <thead><tr><th>Статья</th><th>Ед.</th><th>Кол-во</th><th>Цена без НДС</th><th>Цена с НДС</th><th>Кол-во ред.</th><th>Цена ред.</th><th>Тип</th></tr></thead>
-            <tbody>
-              {settings.expense_settings.map((row, index) => (
-                <tr key={row.article}>
-                  <td>{row.article}</td>
-                  <td><input value={row.unit || ""} disabled={!isDirector} onChange={(e) => updateExpense(index, "unit", e.target.value)} /></td>
-                  <td><input type="number" value={row.qty_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(index, "qty_default", Number(e.target.value || 0))} /></td>
-                  <td><input type="number" value={row.price_net_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(index, "price_net_default", Number(e.target.value || 0))} /></td>
-                  <td><input type="number" value={row.price_vat_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(index, "price_vat_default", Number(e.target.value || 0))} /></td>
-                  <td><input type="checkbox" checked={!!row.qty_manager} disabled={!isDirector} onChange={(e) => updateExpense(index, "qty_manager", e.target.checked)} /></td>
-                  <td><input type="checkbox" checked={!!row.price_manager} disabled={!isDirector} onChange={(e) => updateExpense(index, "price_manager", e.target.checked)} /></td>
-                  <td>{row.calc_type}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ProductsView({ user, products, setProducts, saveProducts, importProducts }) {
-  const isDirector = user.role === "director";
-  const update = (index, field, value) => setProducts((prev) => {
-    const next = clone(prev);
-    next[index][field] = value;
-    return next;
-  });
-  const addRow = () => setProducts((prev) => ([...prev, { product_id: `PRD-${Date.now()}`, sku: "", name: "", price_vat: 0, price_net: 0, min_price_net: 0, margin_pct: 0.65, comment: "" }]));
-  const removeRow = (index) => setProducts((prev) => prev.filter((_, i) => i !== index));
-
-  return (
-    <div className="stack-gap">
-      <div className="card">
-        <div className="card-head compact-row">
-          <h3>Справочник товаров</h3>
-          <div className="mini-actions">
-            <a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать шаблон</a>
-            {isDirector && <label className="ghost file-btn">Импорт <input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}
-            {isDirector && <button className="ghost" onClick={addRow}>+ Товар</button>}
-            {isDirector && <button className="primary" onClick={saveProducts}>Сохранить</button>}
-          </div>
-        </div>
-        <div className="table-shell">
-          <table className="dense-table">
-            <thead>
-              <tr>
-                <th>ID</th><th>Артикул</th><th>Наименование</th><th>Цена с НДС</th><th>Цена без НДС</th><th>Мин. цена</th><th>% премии</th><th>Комментарий</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((row, index) => (
-                <tr key={`${row.product_id}-${index}`}>
-                  <td><input value={row.product_id || ""} disabled={!isDirector} onChange={(e) => update(index, "product_id", e.target.value)} /></td>
-                  <td><input value={row.sku || ""} disabled={!isDirector} onChange={(e) => update(index, "sku", e.target.value)} /></td>
-                  <td><input value={row.name || ""} disabled={!isDirector} onChange={(e) => update(index, "name", e.target.value)} /></td>
-                  <td><input type="number" value={row.price_vat ?? 0} disabled={!isDirector} onChange={(e) => update(index, "price_vat", e.target.value)} /></td>
-                  <td><input type="number" value={row.price_net ?? 0} disabled={!isDirector} onChange={(e) => update(index, "price_net", e.target.value)} /></td>
-                  <td><input type="number" value={row.min_price_net ?? 0} disabled={!isDirector} onChange={(e) => update(index, "min_price_net", e.target.value)} /></td>
-                  <td><input type="number" step="0.01" value={row.margin_pct ?? 0.65} disabled={!isDirector} onChange={(e) => update(index, "margin_pct", e.target.value)} /></td>
-                  <td><input value={row.comment || ""} disabled={!isDirector} onChange={(e) => update(index, "comment", e.target.value)} /></td>
-                  <td>{isDirector && <button className="danger xs" onClick={() => removeRow(index)}>✕</button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TabButton({ active, children, ...props }) {
-  return <button className={`tab-btn ${active ? "active" : ""}`} {...props}>{children}</button>;
-}
-
-function Notice({ notice }) {
-  return <div className={`notice ${notice.type || "info"}`}>{notice.text}</div>;
-}
-
-function Kpi({ title, value }) {
-  return <div className="kpi-box"><span>{title}</span><b>{value}</b></div>;
-}
-
-function SimpleTable({ rows }) {
-  if (!rows?.length) return <div className="muted compact">Нет данных.</div>;
-  const headers = Object.keys(rows[0]);
-  return (
-    <div className="table-shell">
-      <table className="dense-table">
-        <thead><tr>{headers.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+    <div className="card">
+      <h3>Расчеты с водителем</h3>
+      <table className="dense-table two-col-table">
+        <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
         <tbody>
-          {rows.map((row, idx) => <tr key={idx}>{headers.map((h) => <td key={h}>{String(row[h] ?? "")}</td>)}</tr>)}
+          {(calc.driver_settlement || []).map((row) => (
+            <tr key={row.name}>
+              <td>{row.name}</td>
+              <td className="align-right strong">{typeof row.value === "number" ? `${row.value.toLocaleString("ru-RU")} ${row.unit || ""}` : row.value}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
+function DeductionTab({ calc, confirmed }) {
+  return (
+    <div className="stack-gap">
+      <div className="kpi-grid six-kpi">
+        <Kpi title="[DEMO_COST] без НДС" value={money(calc.demo_cost_net)} />
+        <Kpi title="[xP]" value={Number(calc.xP || 0).toFixed(3)} />
+        <Kpi title="[xR]" value={Number(calc.xR || 0).toFixed(3)} />
+        <Kpi title="[xM]" value={Number(calc.xM || 0).toFixed(3)} />
+        <Kpi title="[K2] = xP × xR × xM" value={Number(calc.K2 || 0).toFixed(3)} />
+        <Kpi title="[K1] коэффициент ответственности" value={Number(calc.K1 || 0).toFixed(3)} />
+      </div>
+      <div className="card totals-card">
+        <Kpi title="Уменьшение премии, NET руб. (наличных на карте) [VIC]" value={money(calc.VIC)} />
+        <Kpi title="Подтвержденная сумма вычета [VIC_CONFIRM]" value={money(confirmed)} />
+      </div>
+    </div>
+  );
+}
+
+function ExpenseSection({ title, rows, allRows, expenseMap, updateExpenseRow, readonly }) {
+  const rowIndex = (row) => allRows.findIndex((x) => x.article === row.article);
+  return (
+    <div className="card">
+      <div className="card-head compact-row"><h3>{title}</h3></div>
+      <div className="table-shell">
+        <table className="dense-table">
+          <thead><tr><th>Статья</th><th>Кол-во</th><th>Ед.</th><th>Цена без НДС</th><th>Цена с НДС</th><th>Сумма с НДС</th></tr></thead>
+          <tbody>
+            {rows.map((row) => {
+              const index = rowIndex(row);
+              const conf = expenseMap[row.article] || row;
+              const canQty = !readonly && !!conf.qty_manager;
+              const canPrice = !readonly && !!conf.price_manager;
+              return (
+                <tr key={row.article}>
+                  <td><div className="row-title">{row.article}</div><div className="muted tiny">{row.comment}</div></td>
+                  <td><input className={!canQty ? "locked-input" : "manager-input"} type="number" value={row.qty ?? 0} disabled={!canQty} onChange={(e) => updateExpenseRow(index, "qty", e.target.value)} /></td>
+                  <td><input className="locked-input" value={row.unit || ""} disabled /></td>
+                  <td><input className={!canPrice ? "locked-input" : "manager-input"} type="number" value={row.price_net ?? 0} disabled={!canPrice} onChange={(e) => updateExpenseRow(index, "price_net", e.target.value)} /></td>
+                  <td><input className={!canPrice ? "locked-input" : "manager-input"} type="number" value={row.price_vat ?? 0} disabled={!canPrice} onChange={(e) => updateExpenseRow(index, "price_vat", e.target.value)} /></td>
+                  <td className="align-right strong readonly-cell">{money(row.amount_vat)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CriterionRow({ criterion, editorValue, onLevel, onComment, readonly }) {
+  const levelCount = criterion.levels?.length || 1;
+  return (
+    <div className="criterion-row">
+      <div className="criterion-about"><div className="criterion-code">{criterion.code}</div><div className="criterion-title">{criterion.title}</div><div className="criterion-desc">{criterion.desc}</div></div>
+      <div className="criterion-levels">
+        {criterion.levels.map((level, idx) => (
+          <button key={`${criterion.code}-${idx}`} disabled={readonly} className={`level-box level-tone-${Math.round((idx / Math.max(1, levelCount - 1)) * 4)} ${Number(editorValue.level_index) === idx ? "active" : ""}`} onClick={() => onLevel(idx)}>
+            <span>{level[0]}</span><b>[{level[1]}]</b>
+          </button>
+        ))}
+      </div>
+      <div className="criterion-comment"><textarea disabled={readonly} value={editorValue.manager_comment || ""} onChange={(e) => onComment(e.target.value)} placeholder="Комментарий менеджера" /></div>
+    </div>
+  );
+}
+
+function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSearch, setProductSearch, productSuggestions, selectedProductId, setSelectedProductId, addProductToSale, saleRowCommand, user }) {
+  const calc = detail.calc || {};
+  const readonly = !!editor.is_locked || (user.role !== "director" && !!editor.is_director_confirmed);
+  return (
+    <div className="stack-gap">
+      <div className="card fields-grid compact-info-grid sale-info-grid">
+        <Field label="Дата продажи"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
+        <Field label="Клиент"><input value={editor.client || ""} disabled={readonly} onChange={(e) => updateEditorField("client", e.target.value)} /></Field>
+        <Field label="Комментарий" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
+      </div>
+      <div className="kpi-grid sale-kpi">
+        <Kpi title="Сумма продажи с НДС" value={money(calc.total_vat)} />
+        <Kpi title="Суммарная премия за продажу [CASH_ALL]" value={money(calc.cash_all)} />
+        <Kpi title="Сумма подтвержденная директором [CASH_ALL_CONFIRM]" value={money(editor.confirmed_amount)} />
+      </div>
+      <div className="card">
+        <div className="card-head compact-row"><h3>Товары продажи</h3></div>
+        <div className="sale-search-row">
+          <input value={productSearch} disabled={readonly} onChange={(e) => setProductSearch(e.target.value)} placeholder="Начните вводить товар (от 3 символов)" />
+          <select value={selectedProductId} disabled={readonly} onChange={(e) => setSelectedProductId(e.target.value)}>
+            <option value="">Выберите товар</option>
+            {productSuggestions.map((item) => <option key={item.product_id} value={item.product_id}>{item.sku} — {item.name}</option>)}
+          </select>
+          <button className="primary" disabled={readonly} onClick={addProductToSale}>Добавить товар</button>
+        </div>
+        <div className="table-shell">
+          <table className="dense-table">
+            <thead><tr><th>Артикул</th><th>Наименование</th><th>Цена с НДС (прайс) [PR0]</th><th>Цена продажи [PR]</th><th>Кол-во</th><th>Премия NET за продажу [CASH]</th><th></th></tr></thead>
+            <tbody>
+              {(editor.rows || []).map((row, index) => (
+                <tr key={`${row.product_id}-${index}`}>
+                  <td>{row.sku}</td>
+                  <td>{row.name}</td>
+                  <td className="readonly-cell align-right">{money(row.pr0_vat || row.price_vat)}</td>
+                  <td><input type="number" disabled={readonly} value={row.price_vat ?? 0} onChange={(e) => updateSaleRow(index, "price_vat", e.target.value)} /></td>
+                  <td><input type="number" disabled={readonly} value={row.qty ?? 1} onChange={(e) => updateSaleRow(index, "qty", e.target.value)} /></td>
+                  <td className="readonly-cell strong align-right">{money(row.cash_net)}</td>
+                  <td><div className="mini-actions"><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("up", index)}>↑</button><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("down", index)}>↓</button><button className="danger xs" disabled={readonly} onClick={() => saleRowCommand("delete", index)}>✕</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PremiumView({ detail, editor, updateEditorField, user }) {
+  const calc = detail.calc || {};
+  const readonly = !!editor.is_locked || (user.role !== "director" && !!editor.is_director_confirmed);
+  return (
+    <div className="stack-gap">
+      <div className="card fields-grid compact-info-grid sale-info-grid">
+        <Field label="Дата премии"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
+        <Field label="Период"><input value={`${calc.period_from_seq || 0} → ${calc.period_to_seq || 0}`} readOnly /></Field>
+        <Field label="Комментарий" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
+      </div>
+      <div className="kpi-grid premium-kpi">
+        <Kpi title="Премия подтвержденная [CASH_ALL_CONFIRM], руб." value={money(calc.cash_all_confirm)} />
+        <Kpi title="Вычет подтвержденный [VIC_CONFIRM], руб." value={money(calc.vic_confirm)} />
+        <Kpi title="Премия к выплате [PROFIT], руб." value={money(calc.profit)} />
+      </div>
+      {calc.warning ? <div className="warning-box">{calc.warning}</div> : null}
+      <div className="card"><h3>Продажи периода</h3><PremiumSalesTable rows={calc.sale_rows || []} /></div>
+      <div className="card"><h3>Демонстрации периода</h3><PremiumDemoTable rows={calc.demo_rows || []} /></div>
+    </div>
+  );
+}
+
+function PremiumSalesTable({ rows }) {
+  if (!rows.length) return <div className="muted compact">Нет данных.</div>;
+  return (
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Премия расчетная [CASH_ALL], руб.</th><th>Премия подтвержденная [CASH_ALL_CONFIRM], руб.</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Премия расчетная [CASH_ALL], руб."])}</td><td className="align-right strong">{money(r["Премия подтвержденная [CASH_ALL_CONFIRM], руб."])}</td></tr>)}
+    </tbody></table></div>
+  );
+}
+
+function PremiumDemoTable({ rows }) {
+  if (!rows.length) return <div className="muted compact">Нет данных.</div>;
+  return (
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Вычет расчетный [VIC], руб.</th><th>Вычет подтвержденный [VIC_CONFIRM], руб.</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Вычет расчетный [VIC], руб."])}</td><td className="align-right strong">{money(r["Вычет подтвержденный [VIC_CONFIRM], руб."])}</td></tr>)}
+    </tbody></table></div>
+  );
+}
+
+function SettingsView({ user, settings, setSettings, saveSettings }) {
+  const isDirector = user.role === "director";
+  const [criteriaTab, setCriteriaTab] = useState("P");
+  const [expenseTab, setExpenseTab] = useState("settlement");
+  const cities = officeNames(settings);
+  const setField = (path, value) => setSettings((prev) => {
+    const next = clone(prev);
+    const parts = path.split(".");
+    let cursor = next;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      if (!cursor[parts[i]]) cursor[parts[i]] = {};
+      cursor = cursor[parts[i]];
+    }
+    cursor[parts.at(-1)] = value;
+    return next;
+  });
+  const updateExpense = (article, field, value) => setSettings((prev) => {
+    const next = clone(prev);
+    const index = next.expense_settings.findIndex((row) => row.article === article);
+    if (index >= 0) next.expense_settings[index][field] = value;
+    return next;
+  });
+  const updateCriterionScore = (code, lIndex, score) => setSettings((prev) => {
+    const next = clone(prev);
+    const cIndex = next.criteria.findIndex((c) => c.code === code);
+    if (cIndex >= 0) next.criteria[cIndex].levels[lIndex][1] = score;
+    return next;
+  });
+  const updateOfficeRate = (city, key, value) => setSettings((prev) => {
+    const next = clone(prev);
+    if (!next.office_rates) next.office_rates = {};
+    if (!next.office_rates[city]) next.office_rates[city] = {};
+    next.office_rates[city][key] = value;
+    return next;
+  });
+  const expenses = settings.expense_settings || [];
+  const visibleExpenseRows = expenseTab === "driver" ? expenses.filter((row) => row.section === "driver") : expenseTab === "other" ? expenses.filter((row) => row.section !== "driver") : [];
+  return (
+    <div className="stack-gap">
+      <div className="settings-row">
+        <div className="card">
+          <div className="card-head compact-row"><h3>Бизнес-настройки</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+          <div className="fields-grid two">
+            <Field label="[K1] — коэффициент ответственности"><input type="number" step="0.01" value={settings.k1 ?? 0.65} disabled={!isDirector} onChange={(e) => setField("k1", plainNum(e.target.value))} /></Field>
+            <Field label="НДС, %"><input type="number" value={pctUi(settings.vat_rate)} disabled={!isDirector} onChange={(e) => setField("vat_rate", fromPctUi(e.target.value))} /></Field>
+            <Field label="Налоги на ФОТ, %"><input type="number" value={pctUi(settings.payroll_tax_rate)} disabled={!isDirector} onChange={(e) => setField("payroll_tax_rate", fromPctUi(e.target.value))} /></Field>
+            <Field label="Дизель, л/100 км"><input type="number" value={settings.diesel_l_per_100km ?? 12} disabled={!isDirector} onChange={(e) => setField("diesel_l_per_100km", plainNum(e.target.value))} /></Field>
+          </div>
+          <OfficeRatesTable cities={cities} settings={settings} isDirector={isDirector} updateOfficeRate={updateOfficeRate} />
+        </div>
+        <div className="card">
+          <div className="card-head compact-row"><h3>Настройки интерфейса</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+          <div className="fields-grid two">
+            <Field label="Ширина списка действий, %"><input type="number" value={settings.ui.action_list_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.action_list_width_pct", plainNum(e.target.value))} /></Field>
+            <Field label="Ширина “Критерий”, %"><input type="number" value={settings.ui.criteria_name_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_name_width_pct", plainNum(e.target.value))} /></Field>
+            <Field label="Ширина “Уровни”, %"><input type="number" value={settings.ui.criteria_levels_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_levels_width_pct", plainNum(e.target.value))} /></Field>
+            <Field label="Ширина “Комментарий”, %"><input type="number" value={settings.ui.criteria_comment_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_comment_width_pct", plainNum(e.target.value))} /></Field>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head compact-row"><h3>Критерии и баллы</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+        <div className="sub-tabs"><TabButton active={criteriaTab === "P"} onClick={() => setCriteriaTab("P")}>P — Подготовка</TabButton><TabButton active={criteriaTab === "R"} onClick={() => setCriteriaTab("R")}>R — Результат</TabButton><TabButton active={criteriaTab === "M"} onClick={() => setCriteriaTab("M")}>M — Управленческий</TabButton></div>
+        <div className="table-shell"><table className="dense-table"><thead><tr><th>Код</th><th>Критерий</th><th>Уровни и баллы</th></tr></thead><tbody>
+          {settings.criteria.filter((criterion) => criterion.block === criteriaTab).map((criterion) => (
+            <tr key={criterion.code}><td>{criterion.code}</td><td><div className="row-title">{criterion.title}</div><div className="muted tiny">{criterion.desc}</div></td><td><div className="levels-editor">
+              {criterion.levels.map((level, lIndex) => <div key={`${criterion.code}-${lIndex}`} className="level-edit-box"><div className="muted tiny">{level[0]}</div><input type="number" disabled={!isDirector} value={level[1]} onChange={(e) => updateCriterionScore(criterion.code, lIndex, Number(e.target.value || 0))} /></div>)}
+            </div></td></tr>
+          ))}
+        </tbody></table></div>
+      </div>
+
+      <div className="card">
+        <div className="card-head compact-row"><h3>Настройки сметы демонстрации</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+        <OfficeRatesTable cities={cities} settings={settings} isDirector={isDirector} updateOfficeRate={updateOfficeRate} compact />
+        <div className="sub-tabs"><TabButton active={expenseTab === "settlement"} onClick={() => setExpenseTab("settlement")}>Расчеты с водителем</TabButton><TabButton active={expenseTab === "driver"} onClick={() => setExpenseTab("driver")}>Часть 1</TabButton><TabButton active={expenseTab === "other"} onClick={() => setExpenseTab("other")}>Часть 2</TabButton></div>
+        {expenseTab === "settlement" ? <SettlementSettingsInfo /> : <ExpenseSettingsTable rows={visibleExpenseRows} isDirector={isDirector} updateExpense={updateExpense} />}
+      </div>
+    </div>
+  );
+}
+
+function OfficeRatesTable({ cities, settings, isDirector, updateOfficeRate, compact = false }) {
+  return (
+    <div className={`office-rates ${compact ? "compact-rates" : ""}`}>
+      <table className="dense-table">
+        <thead><tr><th>Офис продаж</th><th>Работа водителя за километраж</th><th>Демонстрация криобластера</th><th>Амортизация Газели и ТО</th><th>ST продажи, %</th></tr></thead>
+        <tbody>
+          {cities.map((city) => {
+            const row = settings.office_rates?.[city] || {};
+            return <tr key={city}><td className="row-title">{city}</td><td><input type="number" disabled={!isDirector} value={row.driver_km_rate ?? 0} onChange={(e) => updateOfficeRate(city, "driver_km_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.cryoblaster_rate ?? 0} onChange={(e) => updateOfficeRate(city, "cryoblaster_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.gazelle_rate ?? 0} onChange={(e) => updateOfficeRate(city, "gazelle_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={pctUi(row.sale_st ?? 0)} onChange={(e) => updateOfficeRate(city, "sale_st", fromPctUi(e.target.value))} /></td></tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SettlementSettingsInfo() {
+  return <div className="formula-box">Расчеты с водителем используют километраж по маячку А5/А6, поле «Время работы демонстратором», город офиса менеджера и административные ставки. Эти значения затем автоматически попадают в Часть 1 сметы демонстрации.</div>;
+}
+
+function ExpenseSettingsTable({ rows, isDirector, updateExpense }) {
+  return (
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Статья</th><th>Ед.</th><th>Кол-во</th><th>Цена без НДС</th><th>Цена с НДС</th><th>Кол-во ред.</th><th>Цена ред.</th><th>Тип</th></tr></thead><tbody>
+      {rows.map((row) => <tr key={row.article}><td><div className="row-title">{row.article}</div><div className="muted tiny">{row.comment}</div></td><td><input value={row.unit || ""} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "unit", e.target.value)} /></td><td><input type="number" value={row.qty_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "qty_default", Number(e.target.value || 0))} /></td><td><input type="number" value={row.price_net_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "price_net_default", Number(e.target.value || 0))} /></td><td><input type="number" value={row.price_vat_default ?? 0} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "price_vat_default", Number(e.target.value || 0))} /></td><td><input type="checkbox" checked={!!row.qty_manager} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "qty_manager", e.target.checked)} /></td><td><input type="checkbox" checked={!!row.price_manager} disabled={!isDirector} onChange={(e) => updateExpense(row.article, "price_manager", e.target.checked)} /></td><td>{row.calc_type}</td></tr>)}
+    </tbody></table></div>
+  );
+}
+
+function ProductsView({ user, settings, products, setProducts, saveProducts, importProducts }) {
+  const isDirector = user.role === "director";
+  const cities = officeNames(settings);
+  const [selectedCity, setSelectedCity] = useState(cities[0] || "Казань");
+  const moveProduct = (index, direction) => setProducts((prev) => {
+    const next = clone(prev);
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= next.length) return prev;
+    [next[index], next[target]] = [next[target], next[index]];
+    return next.map((row, i) => ({ ...row, row_order: i + 1 }));
+  });
+  return (
+    <div className="stack-gap">
+      <div className="card">
+        <div className="card-head compact-row">
+          <h3>Справочник товаров</h3>
+          <div className="mini-actions"><select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select><a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать excel</a>{isDirector && <label className="ghost file-btn">Импорт excel<input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}{isDirector && <button className="primary" onClick={saveProducts}>Сохранить порядок</button>}</div>
+        </div>
+        <div className="table-shell"><table className="dense-table"><thead><tr><th></th><th>Артикул</th><th>Наименование</th><th>Цена с НДС (прайс) [PR0]</th><th>Цена без НДС (прайс)</th><th>Маржа без НДС [MR]</th><th>Макс. премия NET [PR]</th><th>Ставка премии от маржи [ST]</th></tr></thead><tbody>
+          {products.map((row, index) => {
+            const params = row.office_params?.[selectedCity] || row.city_params?.[selectedCity] || {};
+            return <tr key={`${row.product_id}-${index}`}><td><div className="mini-actions"><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "up")}>↑</button><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "down")}>↓</button></div></td><td>{row.sku}</td><td>{row.name}</td><td className="align-right">{money(row.price_vat)}</td><td className="align-right">{money(row.price_net)}</td><td className="align-right">{money(params.mr)}</td><td className="align-right">{money(params.pr)}</td><td className="align-right">{percent(params.st)}</td></tr>;
+          })}
+        </tbody></table></div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, className = "" }) {
+  return <label className={`field-stack ${className}`}><span>{label}</span>{children}</label>;
+}
+function TabButton({ active, children, ...props }) { return <button className={`tab-btn ${active ? "active" : ""}`} {...props}>{children}</button>; }
+function Notice({ notice }) { return <div className={`notice ${notice.type || "info"}`}>{notice.text}</div>; }
+function Kpi({ title, value }) { return <div className="kpi-box"><span>{title}</span><b>{value}</b></div>; }
 function cardClass(item) {
   if (item.is_locked) return "locked";
   if (item.type === ACTION_DEMO) return item.is_director_confirmed ? "demo-confirmed" : "demo-open";
