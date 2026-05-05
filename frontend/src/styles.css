@@ -167,8 +167,10 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 
 .warning-box { padding: 10px 12px; border-radius: 12px; border: 1px solid #fecaca; background: #fff1f2; color: #991b1b; }
 .formula-box { padding: 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; color: #111827; }
-.levels-editor { display:flex; gap:8px; flex-wrap: wrap; }
-.level-edit-box { width: 160px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: #f8fbff; }
+.levels-editor { display:flex; gap:8px; flex-wrap: wrap; align-items: stretch; }
+.level-edit-box { width: 160px; min-height: 74px; padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: #f8fbff; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 5px; }
+.level-edit-box .tiny { line-height: 1.2; }
+.level-edit-box input { align-self: end; min-width: 0; }
 .settings-row { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
 .office-rates { margin-top: 8px; }
 .compact-rates { margin-bottom: 8px; }
