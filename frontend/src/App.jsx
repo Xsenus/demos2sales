@@ -869,8 +869,8 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
   });
   return (
     <div className="stack-gap">
-      <div className="card">
-        <div className="card-head compact-row">
+      <div className="card products-card">
+        <div className="card-head compact-row products-head">
           <h3>Справочник товаров</h3>
           <div className="mini-actions products-actions"><select className="city-select" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select><a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать excel</a>{isDirector && <label className="ghost file-btn">Импорт excel<input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}{isDirector && <button className="primary" onClick={saveProducts}>Сохранить порядок</button>}</div>
         </div>

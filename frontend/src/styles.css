@@ -161,6 +161,7 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 
 .products-actions { justify-content: flex-end; flex-wrap: nowrap; }
 .products-actions .city-select { width: 118px; min-width: 118px; flex: 0 0 118px; }
+.products-card .products-head { margin-bottom: 18px; }
 
 .sale-products-card .card-head { margin-bottom: 10px; }
 .sale-products-card .sale-search-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 9px; align-items: end; margin-bottom: 10px; }
