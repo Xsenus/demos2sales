@@ -92,7 +92,7 @@ body.is-resizing-panels { cursor: col-resize; user-select: none; }
 .action-card.premium-confirmed { background: #efe9ff; }
 .action-card.locked { background: var(--gray-soft); color: #4b5563; }
 .list-totals { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
-.list-totals .kpi-box, .sale-kpi .kpi-box { text-align: center; display: grid; align-content: center; justify-items: center; }
+.list-totals .kpi-box, .sale-kpi .kpi-box, .totals-card .kpi-box { text-align: center; display: grid; align-content: center; justify-items: center; }
 .small-check { margin: 4px 0 8px; font-size: 12px; }
 
 .detail-toolbar, .compact-row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
