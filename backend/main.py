@@ -1475,7 +1475,7 @@ class SettingsIn(BaseModel):
     settings: Dict[str, Any]
 
 
-app = FastAPI(title="ИРБИСТЕХ API", version="2.0.0")
+app = FastAPI(title="ИРБИСТЕХ API", version="3.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1488,7 +1488,7 @@ app.add_middleware(
 @app.get("/api/health")
 def api_health():
     state, msg = load_state_from_db()
-    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v2"})
+    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v3"})
 
 
 @app.post("/api/auth/login")
