@@ -40,10 +40,8 @@ DEFAULT_OFFICE_CITIES = ["Казань", "Москва"]
 
 DEFAULT_USERS = {
     "artur": {"login": "artur", "password": "123", "role": "director", "name": "Артур Гимадеев", "office_city": "Казань"},
-    "ruslan": {"login": "ruslan", "password": "111", "role": "manager", "name": "Руслан Абдулин", "office_city": "Казань"},
-    "timur": {"login": "timur", "password": "222", "role": "manager", "name": "Тимур Сафин", "office_city": "Казань"},
-    "maria": {"login": "maria", "password": "333", "role": "manager", "name": "Мария Иванова", "office_city": "Москва"},
-    "ildar": {"login": "ildar", "password": "444", "role": "manager", "name": "Ильдар Хасанов", "office_city": "Москва"},
+    "ruslan": {"login": "ruslan", "password": "111", "role": "manager", "name": "Абдулин Руслан", "office_city": "Казань"},
+    "natalia": {"login": "natalia", "password": "222", "role": "manager", "name": "Денисова Наталья", "office_city": "Казань"},
 }
 
 MONTHS_RU = {
@@ -295,8 +293,8 @@ def default_office_rates() -> Dict[str, Dict[str, float]]:
     # Три административные ставки из Excel-калькулятора зависят от офиса менеджера.
     # Для Москвы значения взяты из примера «Москва 300 км»: 20 / 6000 / 22000.
     return {
-        "Казань": {"driver_km_rate": 15.0, "cryoblaster_rate": 4000.0, "gazelle_rate": 18000.0, "sale_st": 0.565},
-        "Москва": {"driver_km_rate": 20.0, "cryoblaster_rate": 6000.0, "gazelle_rate": 22000.0, "sale_st": 0.465},
+        "Казань": {"driver_km_rate": 15.0, "cryoblaster_rate": 4000.0, "gazelle_rate": 18000.0, "sale_st": 0.565, "latitude": 55.796127, "longitude": 49.106414},
+        "Москва": {"driver_km_rate": 20.0, "cryoblaster_rate": 6000.0, "gazelle_rate": 22000.0, "sale_st": 0.465, "latitude": 55.7987966, "longitude": 37.965255},
     }
 
 
@@ -307,7 +305,6 @@ def default_settings() -> Dict[str, Any]:
         "payroll_tax_rate": 0.30,
         "npd_factor": 0.94,
         "driver_avg_speed_kmh": 75.0,
-        "driver_prep_hours": 2.0,
         "diesel_l_per_100km": 15.0,
         "office_cities": deepcopy(DEFAULT_OFFICE_CITIES),
         "office_rates": default_office_rates(),
@@ -322,6 +319,7 @@ def default_settings() -> Dict[str, Any]:
             "criteria_name_width_pct": 20,
             "criteria_levels_width_pct": 60,
             "criteria_comment_width_pct": 20,
+            "geo_api_key": "",
         },
         "criteria": deepcopy(DEFAULT_CRITERIA),
         "expense_settings": deepcopy(DEFAULT_EXPENSE_SETTINGS),
@@ -333,7 +331,7 @@ def merge_settings(settings: Any) -> Dict[str, Any]:
     legacy_upgrade = False
     if not isinstance(settings, dict):
         return base
-    deprecated_keys = {"company" + "_support_vat", "bonus" + "_rate", "max_demo" + "_deduction_pct"}
+    deprecated_keys = {"company" + "_support_vat", "bonus" + "_rate", "max_demo" + "_deduction_pct", "driver_prep_hours"}
     for k, v in settings.items():
         if k in deprecated_keys:
             legacy_upgrade = True
@@ -369,16 +367,19 @@ def merge_settings(settings: Any) -> Dict[str, Any]:
         base["diesel_l_per_100km"] = 15.0
     rates = base.setdefault("office_rates", {})
     for name in names:
-        rates.setdefault(name, deepcopy(default_rates.get(name, {"driver_km_rate": 15, "cryoblaster_rate": 4000, "gazelle_rate": 18000, "sale_st": 0.50})))
+        rates.setdefault(name, deepcopy(default_rates.get(name, {"driver_km_rate": 15, "cryoblaster_rate": 4000, "gazelle_rate": 18000, "sale_st": 0.50, "latitude": 0.0, "longitude": 0.0})))
         rates[name].setdefault("driver_km_rate", default_rates.get(name, {}).get("driver_km_rate", 15.0))
         rates[name].setdefault("cryoblaster_rate", default_rates.get(name, {}).get("cryoblaster_rate", 4000.0))
         rates[name].setdefault("gazelle_rate", default_rates.get(name, {}).get("gazelle_rate", 18000.0))
         rates[name].setdefault("sale_st", default_rates.get(name, {}).get("sale_st", 0.50))
+        rates[name].setdefault("latitude", default_rates.get(name, {}).get("latitude", 0.0))
+        rates[name].setdefault("longitude", default_rates.get(name, {}).get("longitude", 0.0))
         if to_float(rates[name].get("gazelle_rate"), 0) < 1000:
             rates[name]["gazelle_rate"] = default_rates.get(name, {}).get("gazelle_rate", 18000.0)
     base.setdefault("npd_factor", 0.94)
     base.setdefault("driver_avg_speed_kmh", 75.0)
-    base.setdefault("driver_prep_hours", 2.0)
+    base.setdefault("diesel_l_per_100km", 15.0)
+    base.setdefault("ui", {}).setdefault("geo_api_key", "")
     base["font_family"] = "Arial"
     return base
 
@@ -609,7 +610,8 @@ def get_demo_meta(action: Dict[str, Any]) -> Dict[str, Any]:
     payload = action.get("payload") or {}
     if isinstance(payload, dict):
         meta.update(payload.get("demo_meta") or {})
-    meta.setdefault("demo_hours", None)
+    meta.setdefault("demo_hours", 2.0)
+    meta.setdefault("driver_prep_hours", 2.0)
     return meta
 
 
@@ -659,9 +661,12 @@ def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[D
     existing_by_article_unit = {(str(r.get("article", "")), str(r.get("unit", ""))): r for r in existing}
     rows: List[Dict[str, Any]] = []
     meta = get_demo_meta(action)
-    demo_hours = to_float(meta.get("demo_hours"), 0)
+    demo_hours = to_float(meta.get("demo_hours"), 2.0)
     if demo_hours <= 0:
         demo_hours = 2.0
+    prep_hours = to_float(meta.get("driver_prep_hours"), 2.0)
+    if prep_hours < 0:
+        prep_hours = 0.0
 
     # Kilometers are needed by several Excel formulas.
     default_km = 300.0
@@ -690,7 +695,7 @@ def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[D
             price_vat = 0
             default_km = qty
         elif calc_type == "demo_work_total":
-            qty = to_float(settings.get("driver_prep_hours"), 2.0) + demo_hours
+            qty = prep_hours + demo_hours
             if price_net <= 0:
                 price_net = 1350
             price_vat = 0
@@ -733,7 +738,7 @@ def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[D
 
 
 def default_expense_rows(state: Dict[str, Any], manager_login: Optional[str] = None) -> List[Dict[str, Any]]:
-    action = {"manager_login": manager_login or manager_logins(state)[0] if manager_logins(state) else "ruslan", "expenses": [], "demo_meta": {"demo_hours": 2}}
+    action = {"manager_login": manager_login or manager_logins(state)[0] if manager_logins(state) else "ruslan", "expenses": [], "demo_meta": {"demo_hours": 2, "driver_prep_hours": 2}}
     return normalize_demo_rows(action, state)
 
 
@@ -779,8 +784,9 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
     }
     by_code = {expense_key(r, i): r for i, r in enumerate(expenses, start=1)}
     km = to_float(by_code.get("d_driver_km", {}).get("qty"), 0)
-    demo_hours = to_float(get_demo_meta(action).get("demo_hours"), 2)
-    prep_hours = to_float(settings.get("driver_prep_hours"), 2)
+    meta = get_demo_meta(action)
+    demo_hours = to_float(meta.get("demo_hours"), 2)
+    prep_hours = to_float(meta.get("driver_prep_hours"), 2)
     avg_speed = max(1.0, to_float(settings.get("driver_avg_speed_kmh"), 75))
     road_hours = km / avg_speed
     shift_hours = road_hours + prep_hours + demo_hours
@@ -790,7 +796,7 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
     demo_count = to_float(by_code.get("d_cryoblaster", {}).get("qty"), 0)
     settlement = [
         {"name": "Время в дороге при средней скорости 75 км/ч (туда-обратно)", "value": round(road_hours, 2), "unit": "ч", "formula": "Кругорейс / 75"},
-        {"name": "Время на мед. и тех. осмотр, подписание актов, забор льда", "value": round(prep_hours, 2), "unit": "ч", "formula": "Административная настройка"},
+        {"name": "Время на мед. и тех. осмотр, подписание актов, забор льда", "value": round(prep_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
         {"name": "Время работы демонстратором", "value": round(demo_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
         {"name": "Общее время трудовой смены", "value": round(shift_hours, 2), "unit": "ч", "formula": "Сумма трех строк выше"},
         {"name": "Расчетная ставка для водителя-демонстратора", "value": round(driver_rate, 2), "unit": "руб./ч", "formula": "Вознаграждение NET / смена"},
@@ -891,7 +897,7 @@ def calculate_premium(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str
             "Дата": s.get("date"),
             "Клиент": s.get("client"),
             "Премия расчетная [CASH_ALL], руб.": round(calc["cash_all"], 2),
-            "Премия подтвержденная [CASH_ALL_CONFIRM], руб.": round(amount, 2),
+            "Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб.": round(amount, 2),
         })
     for d in demos:
         calc = calculate_demo(d, state)
@@ -902,7 +908,7 @@ def calculate_premium(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str
             "Дата": d.get("date"),
             "Клиент": d.get("client"),
             "Вычет расчетный [VIC], руб.": round(calc["VIC"], 2),
-            "Вычет подтвержденный [VIC_CONFIRM], руб.": round(amount, 2),
+            "Подтвержденное уменьшение премии [VIC_CONFIRM], руб.": round(amount, 2),
             "is_director_confirmed": bool(d.get("is_director_confirmed")),
         })
     profit = sales_sum - demo_sum
@@ -988,85 +994,11 @@ def mk_criteria(settings: Dict[str, Any], default_idx: int = 1):
 
 
 def create_demo_state() -> Dict[str, Any]:
+    """Пустое рабочее состояние: директор, два менеджера из Казани, товары и настройки, без действий."""
     settings = default_settings()
     users = normalize_users(DEFAULT_USERS)
-    state: Dict[str, Any] = {"settings": settings, "users": users, "products": [], "actions": []}
     products = [normalize_product(p, settings, i) for i, p in enumerate(default_products(), start=1)]
-    state["products"] = products
-
-    scenario = {
-        "ruslan": {"client": "Центр Транс Техмаш", "city": "Казань", "model": "TRANSFORMER 2.0 MAX", "demos": 3, "sales": 2, "premiums": 1},
-        "timur": {"client": "Полипластик", "city": "Казань", "model": "ONE 2.0", "demos": 2, "sales": 1, "premiums": 1},
-        "maria": {"client": "Московская кондитерская фабрика", "city": "Москва", "model": "MINI 3.0", "demos": 4, "sales": 2, "premiums": 2},
-        "ildar": {"client": "МосТехСервис", "city": "Москва", "model": "BASIC 2.0", "demos": 5, "sales": 2, "premiums": 1},
-    }
-    base_date = date(2026, 4, 1)
-    for m_index, (manager, cfg) in enumerate(scenario.items()):
-        seq = 10
-        action_date = base_date.replace(day=min(28, 1 + m_index))
-        action_plan: List[str] = []
-        for i in range(cfg["demos"]):
-            action_plan.append(ACTION_DEMO)
-            if i < cfg["sales"]:
-                action_plan.append(ACTION_SALE)
-            if i in {1, cfg["demos"] - 1} and cfg["premiums"] > len([x for x in action_plan if x == ACTION_PREMIUM]):
-                action_plan.append(ACTION_PREMIUM)
-        if ACTION_PREMIUM not in action_plan:
-            action_plan.append(ACTION_PREMIUM)
-        for idx, action_type in enumerate(action_plan):
-            aid_prefix = "DEMO" if action_type == ACTION_DEMO else "SALE" if action_type == ACTION_SALE else "PREM"
-            a = {
-                "id": f"{manager.upper()}-{seq}",
-                "type": action_type,
-                "manager_login": manager,
-                "sequence_no": seq,
-                "date": action_date.isoformat(),
-                "client": cfg["client"],
-                "city": cfg["city"],
-                "model": cfg["model"],
-                "task_description": "Демо-задача очистки оборудования",
-                "comment": "Демо-данные",
-                "payload": {},
-                "is_director_confirmed": False,
-                "confirmed_amount": None,
-                "director_comment": "",
-            }
-            if action_type == ACTION_DEMO:
-                a["demo_meta"] = {"demo_hours": 2 + (idx % 4) * 2}
-                rows = default_expense_rows(state, manager)
-                # Разные параметры демонстрации.
-                for r in rows:
-                    if r["calc_type"] == "office_driver_km":
-                        r["qty"] = [120, 300, 520, 740, 900][idx % 5]
-                    if r.get("code") == "d_cryoblaster":
-                        r["qty"] = [1, 1, 2, 1][idx % 4]
-                    if r.get("code") == "o_dry_ice_purchase":
-                        r["qty"] = [30, 60, 90, 120][idx % 4]
-                a["expenses"] = rows
-                a["criteria"] = mk_criteria(settings, (idx % 3) + 1)
-            elif action_type == ACTION_SALE:
-                p1 = products[(idx + m_index) % len(products)]
-                p2 = products[(idx + m_index + 2) % len(products)]
-                a["rows"] = [create_sale_row_from_product(p1, 1, settings, cfg["city"], p1["price_vat"])]
-                if idx % 2 == 0:
-                    a["rows"].append(create_sale_row_from_product(p2, 1, settings, cfg["city"], p2["price_vat"] * 0.97))
-            else:
-                pass
-            state["actions"].append(a)
-            sync_action_after_edit(a, state)
-            # Закрываем один ранний период для проверки блокировки.
-            if action_type == ACTION_PREMIUM and seq <= 60:
-                for prev in state["actions"]:
-                    if prev is not a and prev["manager_login"] == manager and prev["sequence_no"] <= seq:
-                        prev["is_director_confirmed"] = True
-                        sync_action_after_edit(prev, state)
-                a["confirmed_amount"] = None
-                sync_action_after_edit(a, state)
-                a["is_director_confirmed"] = True
-                a["director_comment"] = "Период закрыт демо-данными"
-            action_date = date.fromordinal(action_date.toordinal() + 3)
-            seq += 10
-    return state
+    return {"settings": settings, "users": users, "products": products, "actions": []}
 
 
 # ==============================
@@ -1273,7 +1205,7 @@ def add_action(state: Dict[str, Any], user: Dict[str, Any], action_type: str, ma
         "director_comment": "",
     }
     if action_type == ACTION_DEMO:
-        action["demo_meta"] = {"demo_hours": 2}
+        action["demo_meta"] = {"demo_hours": 2, "driver_prep_hours": 2}
         action["expenses"] = default_expense_rows(state, manager_login)
         action["criteria"] = mk_criteria(state["settings"], 0)
     elif action_type == ACTION_SALE:
@@ -1643,6 +1575,7 @@ def api_action_preview(action_id: str, body: ActionPatchIn, user: Dict[str, Any]
 
 @app.get("/api/products")
 def api_products(user: Dict[str, Any] = Depends(get_user_from_header)):
+    assert_director(user)
     state, _ = load_state_from_db()
     return clean_json({"items": sorted_products(state.get("products", []), state["settings"]), "office_cities": office_names(state["settings"])})
 
@@ -1742,6 +1675,7 @@ def api_products_import(file: UploadFile = File(...), user: Dict[str, Any] = Dep
 
 @app.get("/api/settings")
 def api_settings(user: Dict[str, Any] = Depends(get_user_from_header)):
+    assert_director(user)
     state, _ = load_state_from_db()
     return clean_json({"settings": state["settings"]})
 

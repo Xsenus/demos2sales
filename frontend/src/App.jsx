@@ -54,9 +54,9 @@ function App() {
   const [productSearch, setProductSearch] = useState("");
   const [productSuggestions, setProductSuggestions] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState("");
-  const [demoTab, setDemoTab] = useState("driver");
+  const [demoTab, setDemoTab] = useState("estimate");
   const [actionListWidth, setActionListWidth] = useState(savedActionListWidth);
-  const [loginForm, setLoginForm] = useState({ login: "artur", password: "123" });
+  const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const { notice, show, clear } = useNotice();
 
   const ui = settings?.ui || {};
@@ -117,8 +117,12 @@ function App() {
       } else if (selectedActionId && !data.actions.find((a) => a.id === selectedActionId)) {
         setSelectedActionId(data.actions?.[0]?.id || null);
       }
-      const p = await api.products(u.login);
-      setProducts(p.items || []);
+      if (u.role === "director") {
+        const p = await api.products(u.login);
+        setProducts(p.items || []);
+      } else {
+        setProducts([]);
+      }
       clear();
     } catch (e) {
       show(e.message, "error");
@@ -132,12 +136,18 @@ function App() {
   }, [user, managerFilter, hideOldActions]);
 
   useEffect(() => {
+    if (user?.role !== "director" && mainTab !== "actions") {
+      setMainTab("actions");
+    }
+  }, [user, mainTab]);
+
+  useEffect(() => {
     if (user && selectedActionId) {
       api.actionDetail(user.login, selectedActionId)
         .then((res) => {
           setDetail(res);
           setEditor(clone(res.action));
-          if (res.kind !== "demo") setDemoTab("driver");
+          if (res.kind !== "demo") setDemoTab("estimate");
         })
         .catch((e) => show(e.message, "error"));
     } else {
@@ -371,10 +381,6 @@ function App() {
             <input type="password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} />
             <button type="submit" className="primary">Войти</button>
           </form>
-          <div className="login-hint">
-            <div><b>Директор:</b> artur / 123</div>
-            <div><b>Менеджеры:</b> ruslan / 111, timur / 222, maria / 333, ildar / 444</div>
-          </div>
           {notice.text ? <Notice notice={notice} /> : null}
         </div>
       </div>
@@ -408,8 +414,8 @@ function App() {
 
       <div className="top-tabs">
         <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>Действия</TabButton>
-        <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}>Настройки</TabButton>
-        <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}>Товары</TabButton>
+        {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}>Настройки</TabButton>}
+        {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}>Товары</TabButton>}
         <button className="ghost" onClick={() => loadBootstrap()}>Обновить из БД</button>
       </div>
 
@@ -436,9 +442,9 @@ function App() {
               <span>Скрыть старые действия</span>
             </label>
             <div className="list-totals">
-              <Kpi title="[PROFIT]" value={money0(listTotals.profit)} />
-              <Kpi title="[CASH_ALL_CONFIRM]" value={money0(listTotals.cash)} />
-              <Kpi title="[VIC_CONFIRM]" value={money0(listTotals.vic)} />
+              <Kpi title="Премия к выплате [PROFIT]" value={money0(listTotals.profit)} />
+              <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" value={money0(listTotals.cash)} />
+              <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money0(listTotals.vic)} />
             </div>
             <div className="action-list">
               {actionList.map((item) => (
@@ -466,7 +472,7 @@ function App() {
                     <span>Подтверждено директором</span>
                   </label>
                   <label className="field-stack compact-field">
-                    <span>{detailKind === "demo" ? "[VIC_CONFIRM]" : detailKind === "sale" ? "[CASH_ALL_CONFIRM]" : "[PROFIT_CONFIRM]"}</span>
+                    <span>{detailKind === "demo" ? "Подтвержденное уменьшение премии [VIC_CONFIRM]" : detailKind === "sale" ? "Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" : "Премия к выплате [PROFIT]"}</span>
                     <input type="number" value={editor.confirmed_amount ?? ""} onChange={(e) => updateDirectorFields("confirmed_amount", e.target.value)} placeholder="Сумма" disabled={user.role !== "director" || editor.is_locked} />
                   </label>
                   <label className="field-stack compact-field wide-field">
@@ -512,8 +518,8 @@ function App() {
         </div>
       )}
 
-      {mainTab === "settings" && settings && <SettingsView user={user} settings={settings} setSettings={setSettings} saveSettings={saveSettings} />}
-      {mainTab === "products" && <ProductsView user={user} settings={settings} products={products} setProducts={setProducts} saveProducts={saveProducts} importProducts={importProducts} />}
+      {user.role === "director" && mainTab === "settings" && settings && <SettingsView user={user} settings={settings} setSettings={setSettings} saveSettings={saveSettings} />}
+      {user.role === "director" && mainTab === "products" && <ProductsView user={user} settings={settings} products={products} setProducts={setProducts} saveProducts={saveProducts} importProducts={importProducts} />}
     </div>
   );
 }
@@ -526,12 +532,18 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
   const editorExpenseRows = editor.expenses || [];
   const readonly = !!editor.is_locked || (user.role !== "director" && !!editor.is_director_confirmed);
   const demoHours = editor.demo_meta?.demo_hours ?? 2;
+  const driverPrepHours = editor.demo_meta?.driver_prep_hours ?? 2;
   return (
     <div className="stack-gap">
       <div className="card fields-grid compact-info-grid">
         <Field label="Дата"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
         <Field label="Клиент"><input value={editor.client || ""} disabled={readonly} onChange={(e) => updateEditorField("client", e.target.value)} /></Field>
-        <Field label="Город демонстрации"><input value={editor.city || ""} disabled={readonly} onChange={(e) => updateEditorField("city", e.target.value)} /></Field>
+        <Field label="Город/адрес демонстрации">
+          <div className="field-with-button">
+            <input value={editor.city || ""} disabled={readonly} onChange={(e) => updateEditorField("city", e.target.value)} />
+            <button className="ghost route-btn" disabled>Расчет пути</button>
+          </div>
+        </Field>
         <Field label="Офис менеджера"><input value={editor.manager_office_city || ""} readOnly /></Field>
         <Field label="Модель"><input value={editor.model || ""} disabled={readonly} onChange={(e) => updateEditorField("model", e.target.value)} /></Field>
         <Field label="Описание задачи" className="span-2"><textarea value={editor.task_description || ""} disabled={readonly} onChange={(e) => updateEditorField("task_description", e.target.value)} /></Field>
@@ -542,16 +554,19 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
         <Field label="Время работы демонстратором, ч">
           <input type="number" value={demoHours} disabled={readonly} onChange={(e) => updateDemoMeta("demo_hours", e.target.value)} />
         </Field>
-        <div className="muted compact">Поле используется в «Расчетах с водителем» и в Части 1 сметы демонстрации.</div>
+        <Field label="Время на мед. и тех. осмотр, подписание актов, забор льда, ч">
+          <input type="number" value={driverPrepHours} disabled={readonly} onChange={(e) => updateDemoMeta("driver_prep_hours", e.target.value)} />
+        </Field>
+        <div className="muted compact span-2">Оба поля используются в «Расчетах с водителем» и в Части 1 сметы демонстрации.</div>
       </div>
 
       <div className="sub-tabs">
-        <TabButton active={demoTab === "driver"} onClick={() => setDemoTab("driver")}>Расчеты с водителем</TabButton>
         <TabButton active={demoTab === "estimate"} onClick={() => setDemoTab("estimate")}>Смета демонстрации</TabButton>
-        <TabButton active={demoTab === "deduction"} onClick={() => setDemoTab("deduction")}>Расчет вычета</TabButton>
         <TabButton active={demoTab === "P"} onClick={() => setDemoTab("P")}>P — Подготовка</TabButton>
         <TabButton active={demoTab === "R"} onClick={() => setDemoTab("R")}>R — Результат</TabButton>
         <TabButton active={demoTab === "M"} onClick={() => setDemoTab("M")}>M — Управленческий фактор</TabButton>
+        <TabButton active={demoTab === "driver"} onClick={() => setDemoTab("driver")}>Расчеты с водителем</TabButton>
+        <TabButton active={demoTab === "deduction"} onClick={() => setDemoTab("deduction")}>Расчет вычета</TabButton>
       </div>
 
       {demoTab === "driver" && <DriverSettlement calc={calc} />}
@@ -641,10 +656,10 @@ function DeductionTab({ calc, confirmed }) {
         <Kpi title="[K2] = xP × xR × xM" value={Number(calc.K2 || 0).toFixed(3)} />
         <Kpi title="[K1] коэффициент ответственности" value={Number(calc.K1 || 0).toFixed(3)} />
       </div>
-      <div className="formula-box">Формула расчета: [VIC] = [K2] × [K1] × [DEMO_COST]. Подтвержденная директором сумма хранится как [VIC_CONFIRM] и участвует в карточке премии.</div>
+      <div className="formula-box">Формула расчета: [VIC] = [K2] × [K1] × [DEMO_COST]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM] и участвует в карточке премии.</div>
       <div className="card totals-card">
         <Kpi title="Уменьшение премии, NET руб. (наличных на карте) [VIC]" value={money(calc.VIC)} />
-        <Kpi title="Подтвержденная сумма вычета [VIC_CONFIRM]" value={money(confirmed)} />
+        <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money(confirmed)} />
       </div>
     </div>
   );
@@ -719,17 +734,17 @@ function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSea
       <div className="kpi-grid sale-kpi">
         <Kpi title="Сумма продажи с НДС" value={money(calc.total_vat)} />
         <Kpi title="Суммарная премия за продажу [CASH_ALL]" value={money(calc.cash_all)} />
-        <Kpi title="Сумма подтвержденная директором [CASH_ALL_CONFIRM]" value={money(editor.confirmed_amount)} />
+        <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" value={money(editor.confirmed_amount)} />
       </div>
       <div className="card sale-products-card">
         <div className="card-head compact-row"><h3>Товары продажи</h3></div>
         <div className="sale-search-row">
-          <input value={productSearch} disabled={readonly} onChange={(e) => setProductSearch(e.target.value)} placeholder="Начните вводить товар (от 3 символов)" />
-          <select value={selectedProductId} disabled={readonly} onChange={(e) => setSelectedProductId(e.target.value)}>
-            <option value="">Выберите товар</option>
+          <input value={productSearch} disabled={readonly} onChange={(e) => { setProductSearch(e.target.value); setSelectedProductId(""); }} placeholder="Начните вводить товар (от 3 символов)" />
+          <select className="product-suggestions-select" size={Math.min(6, Math.max(2, productSuggestions.length || 1))} value={selectedProductId} disabled={readonly || productSearch.trim().length < 3} onChange={(e) => setSelectedProductId(e.target.value)}>
+            <option value="">{productSearch.trim().length < 3 ? "Введите минимум 3 символа" : "Найденные товары"}</option>
             {productSuggestions.map((item) => <option key={item.product_id} value={item.product_id}>{item.sku} — {item.name}</option>)}
           </select>
-          <button className="primary" disabled={readonly} onClick={addProductToSale}>Добавить товар</button>
+          <button className="primary" disabled={readonly || !selectedProductId} onClick={addProductToSale}>Добавить товар</button>
         </div>
         <div className="table-shell">
           <table className="dense-table">
@@ -765,8 +780,8 @@ function PremiumView({ detail, editor, updateEditorField, user }) {
         <Field label="Комментарий" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
       </div>
       <div className="kpi-grid premium-kpi">
-        <Kpi title="Премия подтвержденная [CASH_ALL_CONFIRM], руб." value={money(calc.cash_all_confirm)} />
-        <Kpi title="Вычет подтвержденный [VIC_CONFIRM], руб." value={money(calc.vic_confirm)} />
+        <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб." value={money(calc.cash_all_confirm)} />
+        <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM], руб." value={money(calc.vic_confirm)} />
         <Kpi title="Премия к выплате [PROFIT], руб." value={money(calc.profit)} />
       </div>
       {calc.warning ? <div className="warning-box">{calc.warning}</div> : null}
@@ -779,8 +794,8 @@ function PremiumView({ detail, editor, updateEditorField, user }) {
 function PremiumSalesTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
-    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Премия расчетная [CASH_ALL], руб.</th><th>Премия подтвержденная [CASH_ALL_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Премия расчетная [CASH_ALL], руб."])}</td><td className="align-right strong">{money(r["Премия подтвержденная [CASH_ALL_CONFIRM], руб."])}</td></tr>)}
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Премия расчетная [CASH_ALL], руб.</th><th>Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб.</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Премия расчетная [CASH_ALL], руб."])}</td><td className="align-right strong">{money(r["Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
@@ -788,8 +803,8 @@ function PremiumSalesTable({ rows }) {
 function PremiumDemoTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
-    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Вычет расчетный [VIC], руб.</th><th>Вычет подтвержденный [VIC_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Вычет расчетный [VIC], руб."])}</td><td className="align-right strong">{money(r["Вычет подтвержденный [VIC_CONFIRM], руб."])}</td></tr>)}
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Вычет расчетный [VIC], руб.</th><th>Подтвержденное уменьшение премии [VIC_CONFIRM], руб.</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Вычет расчетный [VIC], руб."])}</td><td className="align-right strong">{money(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
@@ -835,30 +850,30 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
     <div className="stack-gap">
       <div className="settings-row">
         <div className="card">
-          <div className="card-head compact-row"><h3>Бизнес-настройки</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+          <div className="card-head compact-row save-left">{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}<h3>Бизнес-настройки</h3></div>
           <div className="fields-grid two">
             <Field label="[K1] — коэффициент ответственности"><input type="number" step="0.01" value={settings.k1 ?? 0.65} disabled={!isDirector} onChange={(e) => setField("k1", plainNum(e.target.value))} /></Field>
             <Field label="НДС, %"><input type="number" value={pctUi(settings.vat_rate)} disabled={!isDirector} onChange={(e) => setField("vat_rate", fromPctUi(e.target.value))} /></Field>
             <Field label="НПД, коэффициент к оплате"><input type="number" step="0.01" value={settings.npd_factor ?? 0.94} disabled={!isDirector} onChange={(e) => setField("npd_factor", plainNum(e.target.value))} /></Field>
             <Field label="Средняя скорость, км/ч"><input type="number" value={settings.driver_avg_speed_kmh ?? 75} disabled={!isDirector} onChange={(e) => setField("driver_avg_speed_kmh", plainNum(e.target.value))} /></Field>
-            <Field label="Мед./тех. время водителя, ч"><input type="number" value={settings.driver_prep_hours ?? 2} disabled={!isDirector} onChange={(e) => setField("driver_prep_hours", plainNum(e.target.value))} /></Field>
             <Field label="Дизель, л/100 км"><input type="number" value={settings.diesel_l_per_100km ?? 15} disabled={!isDirector} onChange={(e) => setField("diesel_l_per_100km", plainNum(e.target.value))} /></Field>
           </div>
           <OfficeRatesTable cities={cities} settings={settings} isDirector={isDirector} updateOfficeRate={updateOfficeRate} />
         </div>
         <div className="card">
-          <div className="card-head compact-row"><h3>Настройки интерфейса</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+          <div className="card-head compact-row save-left">{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}<h3>Настройки интерфейса</h3></div>
           <div className="fields-grid two">
             <Field label="Ширина списка действий, %"><input type="number" value={settings.ui.action_list_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.action_list_width_pct", plainNum(e.target.value))} /></Field>
             <Field label="Ширина “Критерий”, %"><input type="number" value={settings.ui.criteria_name_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_name_width_pct", plainNum(e.target.value))} /></Field>
             <Field label="Ширина “Уровни”, %"><input type="number" value={settings.ui.criteria_levels_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_levels_width_pct", plainNum(e.target.value))} /></Field>
             <Field label="Ширина “Комментарий”, %"><input type="number" value={settings.ui.criteria_comment_width_pct} disabled={!isDirector} onChange={(e) => setField("ui.criteria_comment_width_pct", plainNum(e.target.value))} /></Field>
+            <Field label="Гео API-ключ"><input value={settings.ui.geo_api_key || ""} disabled={!isDirector} onChange={(e) => setField("ui.geo_api_key", e.target.value)} /></Field>
           </div>
         </div>
       </div>
 
       <div className="card">
-        <div className="card-head compact-row"><h3>Критерии и баллы</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+        <div className="card-head compact-row save-left">{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}<h3>Критерии и баллы</h3></div>
         <div className="sub-tabs"><TabButton active={criteriaTab === "P"} onClick={() => setCriteriaTab("P")}>P — Подготовка</TabButton><TabButton active={criteriaTab === "R"} onClick={() => setCriteriaTab("R")}>R — Результат</TabButton><TabButton active={criteriaTab === "M"} onClick={() => setCriteriaTab("M")}>M — Управленческий</TabButton></div>
         <div className="table-shell"><table className="dense-table"><thead><tr><th>Код</th><th>Критерий</th><th>Уровни и баллы</th></tr></thead><tbody>
           {settings.criteria.filter((criterion) => criterion.block === criteriaTab).map((criterion) => (
@@ -870,7 +885,7 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
       </div>
 
       <div className="card">
-        <div className="card-head compact-row"><h3>Настройки сметы демонстрации</h3>{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}</div>
+        <div className="card-head compact-row save-left">{isDirector && <button className="primary" onClick={saveSettings}>Сохранить</button>}<h3>Настройки сметы демонстрации</h3></div>
         <OfficeRatesTable cities={cities} settings={settings} isDirector={isDirector} updateOfficeRate={updateOfficeRate} compact />
         <div className="sub-tabs"><TabButton active={expenseTab === "settlement"} onClick={() => setExpenseTab("settlement")}>Расчеты с водителем</TabButton><TabButton active={expenseTab === "driver"} onClick={() => setExpenseTab("driver")}>Часть 1</TabButton><TabButton active={expenseTab === "other"} onClick={() => setExpenseTab("other")}>Часть 2</TabButton></div>
         {expenseTab === "settlement" ? <SettlementSettingsInfo /> : <ExpenseSettingsTable rows={visibleExpenseRows} isDirector={isDirector} updateExpense={updateExpense} />}
@@ -883,11 +898,11 @@ function OfficeRatesTable({ cities, settings, isDirector, updateOfficeRate, comp
   return (
     <div className={`office-rates ${compact ? "compact-rates" : ""}`}>
       <table className="dense-table">
-        <thead><tr><th>Офис продаж</th><th>Работа водителя за километраж</th><th>Демонстрация криобластера</th><th>Амортизация Газели и ТО</th><th>ST продажи, %</th></tr></thead>
+        <thead><tr><th>Офис продаж</th><th>Работа водителя за километраж</th><th>Демонстрация криобластера</th><th>Амортизация Газели и ТО</th><th>ST продажи, %</th><th>Широта</th><th>Долгота</th></tr></thead>
         <tbody>
           {cities.map((city) => {
             const row = settings.office_rates?.[city] || {};
-            return <tr key={city}><td className="row-title">{city}</td><td><input type="number" disabled={!isDirector} value={row.driver_km_rate ?? 0} onChange={(e) => updateOfficeRate(city, "driver_km_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.cryoblaster_rate ?? 0} onChange={(e) => updateOfficeRate(city, "cryoblaster_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.gazelle_rate ?? 0} onChange={(e) => updateOfficeRate(city, "gazelle_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={pctUi(row.sale_st ?? 0)} onChange={(e) => updateOfficeRate(city, "sale_st", fromPctUi(e.target.value))} /></td></tr>;
+            return <tr key={city}><td className="row-title">{city}</td><td><input type="number" disabled={!isDirector} value={row.driver_km_rate ?? 0} onChange={(e) => updateOfficeRate(city, "driver_km_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.cryoblaster_rate ?? 0} onChange={(e) => updateOfficeRate(city, "cryoblaster_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.gazelle_rate ?? 0} onChange={(e) => updateOfficeRate(city, "gazelle_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={pctUi(row.sale_st ?? 0)} onChange={(e) => updateOfficeRate(city, "sale_st", fromPctUi(e.target.value))} /></td><td><input type="number" step="0.000001" disabled={!isDirector} value={row.latitude ?? 0} onChange={(e) => updateOfficeRate(city, "latitude", plainNum(e.target.value))} /></td><td><input type="number" step="0.000001" disabled={!isDirector} value={row.longitude ?? 0} onChange={(e) => updateOfficeRate(city, "longitude", plainNum(e.target.value))} /></td></tr>;
           })}
         </tbody>
       </table>
@@ -896,7 +911,7 @@ function OfficeRatesTable({ cities, settings, isDirector, updateOfficeRate, comp
 }
 
 function SettlementSettingsInfo() {
-  return <div className="formula-box">Расчеты с водителем используют Excel-логику строк 26B:35C: кругорейс / средняя скорость, административное время, время работы демонстратором, сумма НПД по Части 1 и коэффициент НПД 0.94. Город офиса менеджера фиксируется в БД и подставляет три городские ставки автоматически.</div>;
+  return <div className="formula-box">Расчеты с водителем используют Excel-логику строк 26B:35C: кругорейс / средняя скорость, мед./тех. время, время работы демонстратором, сумма НПД по Части 1 и коэффициент НПД 0.94. Город офиса менеджера фиксируется в БД и подставляет три городские ставки автоматически.</div>;
 }
 
 function ExpenseSettingsTable({ rows, isDirector, updateExpense }) {
