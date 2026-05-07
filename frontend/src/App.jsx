@@ -8,6 +8,21 @@ const ACTION_PREMIUM = "Выплата премии";
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const money = (v) => `${Number(v || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 const money0 = (v) => `${Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+const formatDateRu = (v) => {
+  const raw = String(v || "").slice(0, 10);
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : raw;
+};
+const dateInputValue = (v) => {
+  const raw = String(v || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
+};
+const oneDecimalComma = (v, fallback = 0) => {
+  const n = plainNum(v);
+  const value = Number.isFinite(n) ? n : fallback;
+  return value.toLocaleString("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+};
+const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const percent = (v) => `${(Number(v || 0) * 100).toFixed(1)}%`;
 const pctUi = (v) => {
   const n = Number(v || 0);
@@ -340,12 +355,38 @@ function App() {
     rows[index] = { ...rows[index], [field]: value };
     return { ...prev, rows };
   });
-  const updateExpenseRow = (index, field, value) => setEditor((prev) => {
-    if (index < 0) return prev;
-    const rows = clone(prev.expenses || []);
-    rows[index] = { ...rows[index], [field]: value };
-    return { ...prev, expenses: rows };
-  });
+  const patchExpenseRow = (row, field, value) => {
+    const current = { ...(row || {}) };
+    current[field] = value;
+
+    // В Части 2 сметы менеджер может вводить цену без НДС или с НДС.
+    // Второе поле сразу пересчитывается через текущую ставку НДС, чтобы смета не расходилась визуально.
+    if (current.section !== "driver" && ["price_net", "price_vat"].includes(field)) {
+      const vat = plainNum(settings?.vat_rate ?? 0.22);
+      if (field === "price_net") current.price_vat = round2(plainNum(value) * (1 + vat));
+      if (field === "price_vat") current.price_net = round2(plainNum(value) / (1 + vat));
+    }
+    return current;
+  };
+  const updateExpenseRow = (index, field, value) => {
+    if (index < 0) return;
+    const sourceRow = editor?.expenses?.[index] || detail?.calc?.expenses?.[index] || {};
+    const patched = patchExpenseRow(sourceRow, field, value);
+    setEditor((prev) => {
+      const rows = clone(prev.expenses || []);
+      rows[index] = patched;
+      return { ...prev, expenses: rows };
+    });
+    setDetail((prev) => {
+      if (!prev?.calc?.expenses?.length) return prev;
+      const rows = clone(prev.calc.expenses || []);
+      const targetKey = expenseKey(patched, index);
+      const calcIndex = rows.findIndex((row, idx) => expenseKey(row, idx) === targetKey);
+      const targetIndex = calcIndex >= 0 ? calcIndex : index;
+      rows[targetIndex] = { ...(rows[targetIndex] || {}), ...patched };
+      return { ...prev, calc: { ...prev.calc, expenses: rows } };
+    });
+  };
   const updateCriterion = (code, patch) => setEditor((prev) => ({
     ...prev,
     criteria: { ...(prev.criteria || {}), [code]: { ...(prev.criteria?.[code] || {}), ...patch } },
@@ -449,7 +490,7 @@ function App() {
             <div className="action-list">
               {actionList.map((item) => (
                 <div key={item.id} className={`action-card ${selectedActionId === item.id ? "selected" : ""} ${cardClass(item)}`} onClick={() => setSelectedActionId(item.id)} role="button" tabIndex={0}>
-                  <div className="action-title-one-line">{item.line1}</div>
+                  <div className="action-title-one-line">{user.role === "director" && item.manager_name ? `${item.line1} | ${item.manager_name}` : item.line1}</div>
                   <div className="action-title-buttons">
                     <button className="ghost icon-btn" title="Выше" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "up"); }}>↑</button>
                     <button className="ghost icon-btn" title="Ниже" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "down"); }}>↓</button>
@@ -536,26 +577,32 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
   return (
     <div className="stack-gap">
       <div className="card fields-grid compact-info-grid">
-        <Field label="Дата"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
+        <Field label="Дата"><DateInput value={editor.date} disabled={readonly} onChange={(value) => updateEditorField("date", value)} /></Field>
         <Field label="Клиент"><input value={editor.client || ""} disabled={readonly} onChange={(e) => updateEditorField("client", e.target.value)} /></Field>
-        <Field label="Город/адрес демонстрации">
+        <Field label="Город/адрес демонстрации" className="span-2">
           <div className="field-with-button">
             <input value={editor.city || ""} disabled={readonly} onChange={(e) => updateEditorField("city", e.target.value)} />
             <button className="ghost route-btn" disabled>Расчет пути</button>
           </div>
         </Field>
-        <Field label="Офис менеджера"><input value={editor.manager_office_city || ""} readOnly /></Field>
         <Field label="Модель"><input value={editor.model || ""} disabled={readonly} onChange={(e) => updateEditorField("model", e.target.value)} /></Field>
         <Field label="Описание задачи" className="span-2"><textarea value={editor.task_description || ""} disabled={readonly} onChange={(e) => updateEditorField("task_description", e.target.value)} /></Field>
         <Field label="Комментарий менеджера" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
       </div>
 
       <div className="card demo-hours-row">
-        <Field label="Время работы демонстратором, ч">
-          <input type="number" value={demoHours} disabled={readonly} onChange={(e) => updateDemoMeta("demo_hours", e.target.value)} />
+        <Field label="Время работы на демонстрации, ч">
+          <input type="text" inputMode="decimal" value={oneDecimalComma(demoHours)} disabled={readonly} onChange={(e) => updateDemoMeta("demo_hours", e.target.value)} />
+          <div className="field-help">
+            <b>Включает только:</b> время монтажа, демонстрации и обратной сборки на территории клиента; работа с электрическим компрессором, электрокатушкой и криобластером.
+            <br /><b>НЕ включает:</b> любое вождение, так как маяк фиксирует все перемещения автомобиля; остановка для питания во время вождения; остановка для отдыха во время вождения.
+          </div>
         </Field>
-        <Field label="Время на мед. и тех. осмотр, подписание актов, забор льда, ч">
-          <input type="number" value={driverPrepHours} disabled={readonly} onChange={(e) => updateDemoMeta("driver_prep_hours", e.target.value)} />
+        <Field label="Время на административные процедуры, ч">
+          <input type="text" inputMode="decimal" value={oneDecimalComma(driverPrepHours)} disabled={readonly} onChange={(e) => updateDemoMeta("driver_prep_hours", e.target.value)} />
+          <div className="field-help">
+            <b>Включает только:</b> подготовительно-заключительное время до выезда и после возвращения; время приемки и сдачи автомобиля, оборудования и документов; время ожидания в местах погрузки, разгрузки, допуска на объект; время оформления документов по выезду и демонстрации; работа на заправке, авторемонте, автомойке; время иных обязательных процедур перед выездом и после рейса.
+          </div>
         </Field>
         <div className="muted compact span-2">Оба поля используются в «Расчетах с водителем» и в Части 1 сметы демонстрации.</div>
       </div>
@@ -619,11 +666,16 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
 }
 
 function DriverSettlement({ calc }) {
+  const settlementValue = (row) => {
+    if (typeof row.value !== "number") return row.value;
+    const formatted = row.unit === "ч" || row.name?.includes("Время") || row.name?.includes("смены") ? oneDecimalComma(row.value) : row.value.toLocaleString("ru-RU");
+    return `${formatted} ${row.unit || ""}`;
+  };
   return (
     <div className="stack-gap">
       <div className="kpi-grid driver-summary-grid">
         {(calc.driver_settlement_summary || []).map((row) => (
-          <Kpi key={row.name} title={row.name} value={typeof row.value === "number" ? `${row.value.toLocaleString("ru-RU")} ${row.unit || ""}` : row.value} />
+          <Kpi key={row.name} title={row.name} value={settlementValue(row)} />
         ))}
       </div>
       <div className="card">
@@ -634,7 +686,7 @@ function DriverSettlement({ calc }) {
             {(calc.driver_settlement || []).map((row) => (
               <tr key={row.name}>
                 <td>{row.name}</td>
-                <td className="align-right strong">{typeof row.value === "number" ? `${row.value.toLocaleString("ru-RU")} ${row.unit || ""}` : row.value}</td>
+                <td className="align-right strong">{settlementValue(row)}</td>
                 <td className="muted tiny">{row.formula || ""}</td>
               </tr>
             ))}
@@ -656,7 +708,7 @@ function DeductionTab({ calc, confirmed }) {
         <Kpi title="[K2] = xP × xR × xM" value={Number(calc.K2 || 0).toFixed(3)} />
         <Kpi title="[K1] коэффициент ответственности" value={Number(calc.K1 || 0).toFixed(3)} />
       </div>
-      <div className="formula-box">Формула расчета: [VIC] = [K2] × [K1] × [DEMO_COST]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM] и участвует в карточке премии.</div>
+      <div className="formula-box">Формула расчета: [VIC] = (1 - [K2]) × [K1] × [DEMO_COST]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM] и участвует в карточке премии.</div>
       <div className="card totals-card">
         <Kpi title="Уменьшение премии, NET руб. (наличных на карте) [VIC]" value={money(calc.VIC)} />
         <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money(confirmed)} />
@@ -687,8 +739,20 @@ function ExpenseSection({ title, rows, allRows, expenseMap, updateExpenseRow, re
               const priceVatReadOnly = ["npd_direct", "office_driver_km", "demo_work_total", "npd_cash_input", "office_cryoblaster"].includes(row.calc_type);
               return (
                 <tr key={expenseKey(row, mapIndex)}>
-                  <td><div className="row-title">{row.article}</div><div className="muted tiny">{row.comment}</div></td>
-                  <td><input className={!canQty ? "locked-input" : "manager-input"} type="number" value={row.qty ?? 0} disabled={!canQty} onChange={(e) => updateExpenseRow(index, "qty", e.target.value)} /></td>
+                  <td><div className="row-title expense-title-with-help"><span>{row.article}</span>{expenseKey(row, mapIndex) === "d_hard_conditions" && <span className="conditions-help">См. условия и надбавки<span className="conditions-tooltip">Улица, +10…+20°C, без осадков — 300 руб./ч.
+Улица, жара свыше +20°C до +28°C — 500 руб./ч.
+Улица, сильная жара свыше +28°C — 800 руб./ч.
+Холод от 0°C до +10°C — 500 руб./ч.
+Мороз ниже 0°C до −10°C — 800 руб./ч.
+Сильный мороз ниже −10°C — 1 200 руб./ч.
+Дождь / мокрый снег — 800 руб./ч.
+Снегопад / наледь / скользкая площадка — 1 000 руб./ч.
+Грязная среда: грязь, масло, сажа, шлам — 700 руб./ч.
+Шумная среда свыше 80 дБ — 500 руб./ч.
+Очень шумная среда свыше 90 дБ — 800 руб./ч.
+Работа в респираторе / защитной маске — 600 руб./ч.
+Работа в противогазе — 1 500 руб./ч.</span></span>}</div><div className="muted tiny">{row.comment}</div></td>
+                  <td><input className={!canQty ? "locked-input" : "manager-input"} type={row.calc_type === "demo_work_total" ? "text" : "number"} inputMode="decimal" value={row.calc_type === "demo_work_total" ? oneDecimalComma(row.qty) : (row.qty ?? 0)} disabled={!canQty} onChange={(e) => updateExpenseRow(index, "qty", e.target.value)} /></td>
                   <td><input className="locked-input" value={row.unit || ""} disabled /></td>
                   <td><input className={!canPrice || priceNetReadOnly ? "locked-input" : "manager-input"} type="number" value={row.price_net ?? 0} disabled={!canPrice || priceNetReadOnly} onChange={(e) => updateExpenseRow(index, "price_net", e.target.value)} /></td>
                   {!isDriverSection && <td><input className={!canPrice || priceVatReadOnly ? "locked-input" : "manager-input"} type="number" value={row.price_vat ?? 0} disabled={!canPrice || priceVatReadOnly} onChange={(e) => updateExpenseRow(index, "price_vat", e.target.value)} /></td>}
@@ -727,7 +791,7 @@ function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSea
   return (
     <div className="stack-gap">
       <div className="card fields-grid compact-info-grid sale-info-grid">
-        <Field label="Дата продажи"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
+        <Field label="Дата продажи"><DateInput value={editor.date} disabled={readonly} onChange={(value) => updateEditorField("date", value)} /></Field>
         <Field label="Клиент"><input value={editor.client || ""} disabled={readonly} onChange={(e) => updateEditorField("client", e.target.value)} /></Field>
         <Field label="Комментарий" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
       </div>
@@ -775,7 +839,7 @@ function PremiumView({ detail, editor, updateEditorField, user }) {
   return (
     <div className="stack-gap">
       <div className="card fields-grid compact-info-grid sale-info-grid">
-        <Field label="Дата премии"><input value={editor.date || ""} disabled={readonly} onChange={(e) => updateEditorField("date", e.target.value)} /></Field>
+        <Field label="Дата премии"><DateInput value={editor.date} disabled={readonly} onChange={(value) => updateEditorField("date", value)} /></Field>
         <Field label="Период"><input value={`${calc.period_from_seq || 0} → ${calc.period_to_seq || 0}`} readOnly /></Field>
         <Field label="Комментарий" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
       </div>
@@ -795,7 +859,7 @@ function PremiumSalesTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
     <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Премия расчетная [CASH_ALL], руб.</th><th>Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Премия расчетная [CASH_ALL], руб."])}</td><td className="align-right strong">{money(r["Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб."])}</td></tr>)}
+      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Премия расчетная [CASH_ALL], руб."])}</td><td className="align-right strong">{money(r["Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
@@ -804,7 +868,7 @@ function PremiumDemoTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
     <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Вычет расчетный [VIC], руб.</th><th>Подтвержденное уменьшение премии [VIC_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{r["Дата"]}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Вычет расчетный [VIC], руб."])}</td><td className="align-right strong">{money(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
+      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Вычет расчетный [VIC], руб."])}</td><td className="align-right strong">{money(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
@@ -911,7 +975,7 @@ function OfficeRatesTable({ cities, settings, isDirector, updateOfficeRate, comp
 }
 
 function SettlementSettingsInfo() {
-  return <div className="formula-box">Расчеты с водителем используют Excel-логику строк 26B:35C: кругорейс / средняя скорость, мед./тех. время, время работы демонстратором, сумма НПД по Части 1 и коэффициент НПД 0.94. Город офиса менеджера фиксируется в БД и подставляет три городские ставки автоматически.</div>;
+  return <div className="formula-box">Расчеты с водителем используют Excel-логику строк 26B:35C: кругорейс / средняя скорость, административное время, время работы на демонстрации, сумма НПД по Части 1 и коэффициент НПД 0.94. Город офиса менеджера фиксируется в БД и подставляет три городские ставки автоматически.</div>;
 }
 
 function ExpenseSettingsTable({ rows, isDirector, updateExpense }) {
@@ -950,6 +1014,15 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
           })}
         </tbody></table></div>
       </div>
+    </div>
+  );
+}
+
+function DateInput({ value, disabled, onChange }) {
+  return (
+    <div className="date-picker-wrap">
+      <input className="date-display-input" value={formatDateRu(value)} readOnly disabled={disabled} aria-hidden="true" tabIndex={-1} />
+      <input className="date-native-overlay" type="date" value={dateInputValue(value)} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label="Дата" />
     </div>
   );
 }
