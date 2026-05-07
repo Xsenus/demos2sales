@@ -253,7 +253,7 @@ def ru_date(text: Any) -> str:
     d = date_obj(text)
     if d == date.min:
         d = date.today()
-    return f"{d.day:02d} {MONTHS_RU.get(d.month, '')} {d.year} г."
+    return f"{d.day:02d}.{d.month:02d}.{d.year}"
 
 
 def money0(value: Any) -> str:
@@ -358,6 +358,11 @@ def merge_settings(settings: Any) -> Dict[str, Any]:
         row.setdefault("section", "other")
         row.setdefault("qty_manager", True)
         row.setdefault("price_manager", True)
+        row.setdefault("calc_type", "direct")
+        if row.get("code") == "d_cryoblaster":
+            row["article"] = "Демонстрация криобластера (1 демо = 1 точка Газели)"
+        if row.get("code") == "d_demo_work":
+            row["comment"] = "Количество = время на административные процедуры + время работы на демонстрации; НПД считается через 0.94"
 
     names = office_names(base)
     default_rates = default_office_rates()
@@ -777,7 +782,7 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
     demo_cost = total_vat / (1 + vat)
     coeffs = calculate_criteria_coeffs(action, settings)
     k1 = to_float(settings.get("k1"), 0.65)
-    vic = demo_cost * coeffs["K2"] * k1
+    vic = (1 - coeffs["K2"]) * k1 * demo_cost
     by_section = {
         "driver": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") == "driver"),
         "other": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") != "driver"),
@@ -796,8 +801,8 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
     demo_count = to_float(by_code.get("d_cryoblaster", {}).get("qty"), 0)
     settlement = [
         {"name": "Время в дороге при средней скорости 75 км/ч (туда-обратно)", "value": round(road_hours, 2), "unit": "ч", "formula": "Кругорейс / 75"},
-        {"name": "Время на мед. и тех. осмотр, подписание актов, забор льда", "value": round(prep_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
-        {"name": "Время работы демонстратором", "value": round(demo_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
+        {"name": "Время на административные процедуры", "value": round(prep_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
+        {"name": "Время работы на демонстрации", "value": round(demo_hours, 2), "unit": "ч", "formula": "Поле над вкладками"},
         {"name": "Общее время трудовой смены", "value": round(shift_hours, 2), "unit": "ч", "formula": "Сумма трех строк выше"},
         {"name": "Расчетная ставка для водителя-демонстратора", "value": round(driver_rate, 2), "unit": "руб./ч", "formula": "Вознаграждение NET / смена"},
         {"name": "Вознаграждение водителя NET за смену, руб.", "value": round(reward_net, 2), "unit": "руб.", "formula": "Сумма НПД × 0.94"},
