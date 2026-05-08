@@ -750,18 +750,22 @@ def default_expense_rows(state: Dict[str, Any], manager_login: Optional[str] = N
 def calculate_criteria_coeffs(action: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:
     criteria_state = action.get("criteria", {}) or {}
     block_data = {"P": {"score": 0.0, "max": 0.0}, "R": {"score": 0.0, "max": 0.0}, "M": {"score": 0.0, "max": 0.0}}
+    criterion_scores: Dict[str, float] = {}
     for cr in settings.get("criteria", DEFAULT_CRITERIA):
         block = cr.get("block") or "P"
         levels = cr.get("levels", []) or []
         if block not in block_data or not levels:
             continue
-        item = criteria_state.get(cr["code"], {})
+        code = str(cr.get("code") or "")
+        item = criteria_state.get(code, {})
         idx = int(to_float(item.get("level_index"), 0))
         idx = max(0, min(idx, len(levels) - 1))
         scores = [to_float(l[1], 0) for l in levels]
-        block_data[block]["score"] += scores[idx]
+        selected_score = scores[idx] if scores else 0.0
+        criterion_scores[code] = selected_score
+        block_data[block]["score"] += selected_score
         block_data[block]["max"] += max(scores) if scores else 0
-    result: Dict[str, Any] = {}
+    result: Dict[str, Any] = {"criterion_scores": criterion_scores}
     for block in ["P", "R", "M"]:
         score = block_data[block]["score"]
         max_score = block_data[block]["max"] or 1
@@ -770,7 +774,17 @@ def calculate_criteria_coeffs(action: Dict[str, Any], settings: Dict[str, Any]) 
         result[block] = round(score, 2)
         result[f"{block}_max"] = round(max_score, 2)
         result[f"x{block}"] = round(efficiency, 6)
-    result["K2"] = round(result["xP"] * result["xR"] * result["xM"], 6)
+
+    # Excel sheet "4_Итог": [K2] is weighted efficiency, not multiplication of xP/xR/xM.
+    result["K2"] = round(0.45 * result["xP"] + 0.35 * result["xR"] + 0.20 * result["xM"], 6)
+
+    # Stop factors from Excel:
+    # SOFT_STOP = 1 when critical preparation criteria P2, P4 or P5 have zero score.
+    # HARD_STOP = 1 when preparation card P8 has zero score or the whole M block is zero.
+    soft_stop = any(to_float(criterion_scores.get(code), 0) <= 0 for code in ["P2", "P4", "P5"])
+    hard_stop = to_float(criterion_scores.get("P8"), 0) <= 0 or result["xM"] <= 0
+    result["SOFT_STOP"] = 1 if soft_stop else 0
+    result["HARD_STOP"] = 1 if hard_stop else 0
     return result
 
 
@@ -782,7 +796,19 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
     demo_cost = total_vat / (1 + vat)
     coeffs = calculate_criteria_coeffs(action, settings)
     k1 = to_float(settings.get("k1"), 0.65)
-    vic = (1 - coeffs["K2"]) * k1 * demo_cost
+    office_city = manager_office_city(state, action.get("manager_login", ""))
+    rate = office_rate(settings, office_city, "sale_st", 0.50)
+
+    # Excel sheet "4_Итог": [K3] is the final reduction coefficient after SOFT/HARD stop factors.
+    # HARD_STOP makes the deduction coefficient 100%; SOFT_STOP sets the floor to 80%; otherwise the floor is 20%.
+    if coeffs.get("HARD_STOP"):
+        k3 = 1.0
+    elif coeffs.get("SOFT_STOP"):
+        k3 = max(k1, 0.80)
+    else:
+        k3 = max(k1, 0.20)
+    deduction_margin_net = demo_cost * k3
+    vic = deduction_margin_net * rate
     by_section = {
         "driver": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") == "driver"),
         "other": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") != "driver"),
@@ -827,6 +853,11 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
         "section_other_vat": round(by_section["other"], 2),
         "K1": round(k1, 6),
         "K2": coeffs["K2"],
+        "K3": round(k3, 6),
+        "SOFT_STOP": int(coeffs.get("SOFT_STOP", 0)),
+        "HARD_STOP": int(coeffs.get("HARD_STOP", 0)),
+        "sale_st": round(rate, 6),
+        "deduction_margin_net": round(deduction_margin_net, 2),
         "xP": coeffs["xP"],
         "xR": coeffs["xR"],
         "xM": coeffs["xM"],
@@ -912,7 +943,7 @@ def calculate_premium(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str
             "action_id": d["id"],
             "Дата": d.get("date"),
             "Клиент": d.get("client"),
-            "Вычет расчетный [VIC], руб.": round(calc["VIC"], 2),
+            "Уменьшение премии / Вычет [VIC], NET руб.": round(calc["VIC"], 2),
             "Подтвержденное уменьшение премии [VIC_CONFIRM], руб.": round(amount, 2),
             "is_director_confirmed": bool(d.get("is_director_confirmed")),
         })
@@ -1412,7 +1443,7 @@ class SettingsIn(BaseModel):
     settings: Dict[str, Any]
 
 
-app = FastAPI(title="ИРБИСТЕХ API", version="3.0.0")
+app = FastAPI(title="ИРБИСТЕХ API", version="3.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1425,7 +1456,7 @@ app.add_middleware(
 @app.get("/api/health")
 def api_health():
     state, msg = load_state_from_db()
-    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v3"})
+    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v3.1"})
 
 
 @app.post("/api/auth/login")

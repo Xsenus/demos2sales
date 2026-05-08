@@ -75,7 +75,7 @@ function App() {
   const { notice, show, clear } = useNotice();
 
   const ui = settings?.ui || {};
-  const appFont = settings?.font_family || "Arial";
+  const appFont = settings?.font_family && settings.font_family !== "Arial" ? settings.font_family : "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Arial, sans-serif";
   const detailKind = detail?.kind;
   const actionList = actions || [];
   const resolvedActionListWidth = actionListWidth ?? clampActionListWidth(ui.action_list_width_pct || 31);
@@ -149,12 +149,6 @@ function App() {
   useEffect(() => {
     if (user) loadBootstrap(user, managerFilter, hideOldActions);
   }, [user, managerFilter, hideOldActions]);
-
-  useEffect(() => {
-    if (user?.role !== "director" && mainTab !== "actions") {
-      setMainTab("actions");
-    }
-  }, [user, mainTab]);
 
   useEffect(() => {
     if (user && selectedActionId) {
@@ -408,6 +402,14 @@ function App() {
     show("Вы вышли из системы", "info");
   };
   const userRoleLabel = user ? (user.role === "director" ? "Директор" : `Менеджер · ${user.office_city || ""}`) : "";
+  const activePageTitle = user ? (mainTab === "settings" ? "Настройки" : mainTab === "products" ? "Товары" : "Действия") : "";
+  const activePageSubtitle = user
+    ? (mainTab === "settings"
+      ? "Бизнес-параметры, интерфейс, критерии и смета демонстрации"
+      : mainTab === "products"
+        ? "Справочник товаров, офисные параметры и Excel-обмен"
+        : "Последовательность демонстраций, продаж и премий по менеджерам")
+    : "";
 
   if (!user) {
     return (
@@ -429,138 +431,164 @@ function App() {
   }
 
   return (
-    <div className="app" style={pageStyle}>
-      <header className="header-bar">
-        <div className="header-brand">
-          <div className="brand-title">ИРБИСТЕХ — демонстрации, продажи и премии</div>
-          <div className="muted compact">Внутренняя система демонстраций, продаж и подтверждения премий</div>
-        </div>
-        <details className="header-profile">
-          <summary className="profile-summary">
-            <span className="profile-copy">
-              <span className="profile-name">{user.name}</span>
-              <span className="profile-role">{userRoleLabel}</span>
-            </span>
-            <span className="profile-chevron">⌄</span>
-          </summary>
-          <div className="profile-menu">
-            <div className="profile-menu-info">
-              <div className="profile-menu-name">{user.name}</div>
-              <div className="profile-menu-role">{userRoleLabel}</div>
-            </div>
-            <button className="ghost profile-logout" onClick={logout}>Выйти</button>
+    <div className="app app-shell" style={pageStyle}>
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="logo" aria-hidden="true">И</div>
+          <div className="brand-copy">
+            <h1>ИРБИСТЕХ</h1>
+            <p>Демонстрации · продажи · премии</p>
           </div>
-        </details>
-      </header>
-
-      <div className="top-tabs">
-        <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>Действия</TabButton>
-        {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}>Настройки</TabButton>}
-        {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}>Товары</TabButton>}
-        <button className="ghost" onClick={() => loadBootstrap()}>Обновить из БД</button>
-      </div>
-
-      {notice.text ? <Notice notice={notice} /> : null}
-      {loading ? <div className="loading-strip">Загрузка...</div> : null}
-
-      {mainTab === "actions" && (
-        <div className="actions-layout">
-          <aside className="action-list-panel">
-            <div className="section-head compact-row">
-              {user.role === "director" ? (
-                <select value={managerFilter} onChange={(e) => setManagerFilter(e.target.value)}>
-                  {managerChoices.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              ) : <div className="muted compact">{user.name}</div>}
-            </div>
-            <div className="toolbar-grid">
-              <button className="ghost" onClick={() => createAction(ACTION_DEMO)}>+ Демо</button>
-              <button className="ghost" onClick={() => createAction(ACTION_SALE)}>+ Продажа</button>
-              <button className="ghost" onClick={() => createAction(ACTION_PREMIUM)}>+ Премия</button>
-            </div>
-            <label className="checkbox-row small-check">
-              <input type="checkbox" checked={hideOldActions} onChange={(e) => setHideOldActions(e.target.checked)} />
-              <span>Скрыть старые действия</span>
-            </label>
-            <div className="list-totals">
-              <Kpi title="Премия к выплате [PROFIT]" value={money0(listTotals.profit)} />
-              <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" value={money0(listTotals.cash)} />
-              <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money0(listTotals.vic)} />
-            </div>
-            <div className="action-list">
-              {actionList.map((item) => (
-                <div key={item.id} className={`action-card ${selectedActionId === item.id ? "selected" : ""} ${cardClass(item)}`} onClick={() => setSelectedActionId(item.id)} role="button" tabIndex={0}>
-                  <div className="action-title-one-line">{user.role === "director" && item.manager_name ? `${item.line1} | ${item.manager_name}` : item.line1}</div>
-                  <div className="action-title-buttons">
-                    <button className="ghost icon-btn" title="Выше" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "up"); }}>↑</button>
-                    <button className="ghost icon-btn" title="Ниже" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "down"); }}>↓</button>
-                    {user.role === "director" && <button className="danger icon-btn" title="Удалить" onClick={(e) => { e.stopPropagation(); deleteActionById(item.id); }}>×</button>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
-
-          <div className="panel-resizer" role="separator" aria-label="Изменить ширину списка действий" onPointerDown={startPanelResize} />
-
-          <main className="detail-panel">
-            {!editor || !detail ? <div className="empty-card">Выберите действие слева.</div> : (
-              <>
-                <div className="detail-toolbar"><button className="primary" onClick={saveCurrentAction}>Сохранить</button></div>
-                <div className="card confirm-row one-line-confirm">
-                  <label className="checkbox-row nowrap">
-                    <input type="checkbox" checked={!!editor.is_director_confirmed} disabled={user.role !== "director" || editor.is_locked} onChange={(e) => updateDirectorFields("is_director_confirmed", e.target.checked)} />
-                    <span>Подтверждено директором</span>
-                  </label>
-                  <label className="field-stack compact-field">
-                    <span>{detailKind === "demo" ? "Подтвержденное уменьшение премии [VIC_CONFIRM]" : detailKind === "sale" ? "Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" : "Премия к выплате [PROFIT]"}</span>
-                    <input type="number" value={editor.confirmed_amount ?? ""} onChange={(e) => updateDirectorFields("confirmed_amount", e.target.value)} placeholder="Сумма" disabled={user.role !== "director" || editor.is_locked} />
-                  </label>
-                  <label className="field-stack compact-field wide-field">
-                    <span>Комментарий директора</span>
-                    <input value={editor.director_comment || ""} onChange={(e) => updateDirectorFields("director_comment", e.target.value)} placeholder="Комментарий" disabled={user.role !== "director" || editor.is_locked} />
-                  </label>
-                </div>
-
-                {detailKind === "demo" && (
-                  <DemoView
-                    detail={detail}
-                    editor={editor}
-                    demoTab={demoTab}
-                    setDemoTab={setDemoTab}
-                    updateEditorField={updateEditorField}
-                    updateDemoMeta={updateDemoMeta}
-                    updateExpenseRow={updateExpenseRow}
-                    updateCriterion={updateCriterion}
-                    settings={settings}
-                    user={user}
-                  />
-                )}
-                {detailKind === "sale" && (
-                  <SaleView
-                    detail={detail}
-                    editor={editor}
-                    updateEditorField={updateEditorField}
-                    updateSaleRow={updateSaleRow}
-                    productSearch={productSearch}
-                    setProductSearch={setProductSearch}
-                    productSuggestions={productSuggestions}
-                    selectedProductId={selectedProductId}
-                    setSelectedProductId={setSelectedProductId}
-                    addProductToSale={addProductToSale}
-                    saleRowCommand={saleRowCommand}
-                    user={user}
-                  />
-                )}
-                {detailKind === "premium" && <PremiumView detail={detail} editor={editor} updateEditorField={updateEditorField} user={user} />}
-              </>
-            )}
-          </main>
         </div>
-      )}
 
-      {user.role === "director" && mainTab === "settings" && settings && <SettingsView user={user} settings={settings} setSettings={setSettings} saveSettings={saveSettings} />}
-      {user.role === "director" && mainTab === "products" && <ProductsView user={user} settings={settings} products={products} setProducts={setProducts} saveProducts={saveProducts} importProducts={importProducts} />}
+        <nav className="nav top-tabs" aria-label="Основные разделы">
+          <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>
+            <span className="ico">📋</span><span className="nav-text">Действия</span><span className="count">{actionList.length}</span>
+          </TabButton>
+          {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}><span className="ico">⚙</span><span className="nav-text">Настройки</span></TabButton>}
+          {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}><span className="ico">▦</span><span className="nav-text">Товары</span><span className="count">{products.length}</span></TabButton>}
+        </nav>
+
+        <div className="sidebar-card">
+          <div className="sidebar-card-title">Текущий пользователь</div>
+          <div className="sidebar-user-name">{user.name}</div>
+          <div className="sidebar-user-role">{userRoleLabel}</div>
+          <button className="ghost sidebar-logout" onClick={logout}>Выйти</button>
+        </div>
+      </aside>
+
+      <section className="main">
+        <header className="topbar">
+          <div className="topbar-title-block">
+            <div className="breadcrumb-title">{activePageTitle}</div>
+            <div className="breadcrumb-subtitle">{activePageSubtitle}</div>
+          </div>
+          <div className="topbar-actions">
+            <button className="ghost" onClick={() => loadBootstrap()}>Обновить из БД</button>
+            <details className="header-profile">
+              <summary className="profile-summary">
+                <span className="profile-copy">
+                  <span className="profile-name">{user.name}</span>
+                  <span className="profile-role">{userRoleLabel}</span>
+                </span>
+                <span className="profile-chevron">⌄</span>
+              </summary>
+              <div className="profile-menu">
+                <div className="profile-menu-info">
+                  <div className="profile-menu-name">{user.name}</div>
+                  <div className="profile-menu-role">{userRoleLabel}</div>
+                </div>
+                <button className="ghost profile-logout" onClick={logout}>Выйти</button>
+              </div>
+            </details>
+          </div>
+        </header>
+
+        <main className="content">
+          {notice.text ? <Notice notice={notice} /> : null}
+          {loading ? <div className="loading-strip"><span className="spin" /> Загрузка...</div> : null}
+
+          {mainTab === "actions" && (
+            <div className="actions-layout">
+              <aside className="action-list-panel panel">
+                <div className="section-head compact-row">
+                  {user.role === "director" ? (
+                    <select value={managerFilter} onChange={(e) => setManagerFilter(e.target.value)}>
+                      {managerChoices.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
+                  ) : <div className="badge blue">{user.name}</div>}
+                </div>
+                <div className="toolbar-grid">
+                  <button className="ghost" onClick={() => createAction(ACTION_DEMO)}>+ Демо</button>
+                  <button className="ghost" onClick={() => createAction(ACTION_SALE)}>+ Продажа</button>
+                  <button className="ghost" onClick={() => createAction(ACTION_PREMIUM)}>+ Премия</button>
+                </div>
+                <label className="checkbox-row small-check">
+                  <input type="checkbox" checked={hideOldActions} onChange={(e) => setHideOldActions(e.target.checked)} />
+                  <span>Скрыть старые действия</span>
+                </label>
+                <div className="list-totals grid cards compact-cards">
+                  <Kpi title="Премия к выплате [PROFIT]" value={money0(listTotals.profit)} />
+                  <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" value={money0(listTotals.cash)} />
+                  <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money0(listTotals.vic)} />
+                </div>
+                <div className="action-list">
+                  {actionList.map((item) => (
+                    <div key={item.id} className={`action-card ${selectedActionId === item.id ? "selected" : ""} ${cardClass(item)}`} onClick={() => setSelectedActionId(item.id)} role="button" tabIndex={0}>
+                      <div className="action-title-one-line">{user.role === "director" && item.manager_name ? `${item.line1} | ${item.manager_name}` : item.line1}</div>
+                      <div className="action-title-buttons">
+                        <button className="ghost icon-btn" title="Выше" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "up"); }}>↑</button>
+                        <button className="ghost icon-btn" title="Ниже" onClick={(e) => { e.stopPropagation(); moveActionById(item.id, "down"); }}>↓</button>
+                        {user.role === "director" && <button className="danger icon-btn" title="Удалить" onClick={(e) => { e.stopPropagation(); deleteActionById(item.id); }}>×</button>}
+                      </div>
+                    </div>
+                  ))}
+                  {!actionList.length ? <div className="empty">Действий пока нет.</div> : null}
+                </div>
+              </aside>
+
+              <div className="panel-resizer" role="separator" aria-label="Изменить ширину списка действий" onPointerDown={startPanelResize} />
+
+              <main className="detail-panel panel">
+                {!editor || !detail ? <div className="empty-card empty">Выберите действие слева.</div> : (
+                  <>
+                    <div className="detail-toolbar"><button className="primary" onClick={saveCurrentAction}>Сохранить</button></div>
+                    <div className="card confirm-row one-line-confirm">
+                      <label className="checkbox-row nowrap">
+                        <input type="checkbox" checked={!!editor.is_director_confirmed} disabled={user.role !== "director" || editor.is_locked} onChange={(e) => updateDirectorFields("is_director_confirmed", e.target.checked)} />
+                        <span>Подтверждено директором</span>
+                      </label>
+                      <label className="field-stack compact-field">
+                        <span>{detailKind === "demo" ? "Подтвержденное уменьшение премии [VIC_CONFIRM]" : detailKind === "sale" ? "Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" : "Премия к выплате [PROFIT]"}</span>
+                        <input type="number" value={editor.confirmed_amount ?? ""} onChange={(e) => updateDirectorFields("confirmed_amount", e.target.value)} placeholder="Сумма" disabled={user.role !== "director" || editor.is_locked} />
+                      </label>
+                      <label className="field-stack compact-field wide-field">
+                        <span>Комментарий директора</span>
+                        <input value={editor.director_comment || ""} onChange={(e) => updateDirectorFields("director_comment", e.target.value)} placeholder="Комментарий" disabled={user.role !== "director" || editor.is_locked} />
+                      </label>
+                    </div>
+
+                    {detailKind === "demo" && (
+                      <DemoView
+                        detail={detail}
+                        editor={editor}
+                        demoTab={demoTab}
+                        setDemoTab={setDemoTab}
+                        updateEditorField={updateEditorField}
+                        updateDemoMeta={updateDemoMeta}
+                        updateExpenseRow={updateExpenseRow}
+                        updateCriterion={updateCriterion}
+                        settings={settings}
+                        user={user}
+                      />
+                    )}
+                    {detailKind === "sale" && (
+                      <SaleView
+                        detail={detail}
+                        editor={editor}
+                        updateEditorField={updateEditorField}
+                        updateSaleRow={updateSaleRow}
+                        productSearch={productSearch}
+                        setProductSearch={setProductSearch}
+                        productSuggestions={productSuggestions}
+                        selectedProductId={selectedProductId}
+                        setSelectedProductId={setSelectedProductId}
+                        addProductToSale={addProductToSale}
+                        saleRowCommand={saleRowCommand}
+                        user={user}
+                      />
+                    )}
+                    {detailKind === "premium" && <PremiumView detail={detail} editor={editor} updateEditorField={updateEditorField} user={user} />}
+                  </>
+                )}
+              </main>
+            </div>
+          )}
+
+          {user.role === "director" && mainTab === "settings" && settings && <SettingsView user={user} settings={settings} setSettings={setSettings} saveSettings={saveSettings} />}
+          {user.role === "director" && mainTab === "products" && <ProductsView user={user} settings={settings} products={products} setProducts={setProducts} saveProducts={saveProducts} importProducts={importProducts} />}
+        </main>
+      </section>
     </div>
   );
 }
@@ -698,6 +726,7 @@ function DriverSettlement({ calc }) {
 }
 
 function DeductionTab({ calc, confirmed }) {
+  const yesNo = (value) => Number(value || 0) ? "Да" : "Нет";
   return (
     <div className="stack-gap">
       <div className="kpi-grid six-kpi">
@@ -705,12 +734,22 @@ function DeductionTab({ calc, confirmed }) {
         <Kpi title={`[xP] ${Number(calc.P || 0).toFixed(0)} / ${Number(calc.P_max || 0).toFixed(0)}`} value={Number(calc.xP || 0).toFixed(3)} />
         <Kpi title={`[xR] ${Number(calc.R || 0).toFixed(0)} / ${Number(calc.R_max || 0).toFixed(0)}`} value={Number(calc.xR || 0).toFixed(3)} />
         <Kpi title={`[xM] ${Number(calc.M || 0).toFixed(0)} / ${Number(calc.M_max || 0).toFixed(0)}`} value={Number(calc.xM || 0).toFixed(3)} />
-        <Kpi title="[K2] = xP × xR × xM" value={Number(calc.K2 || 0).toFixed(3)} />
+        <Kpi title="[K2] взвешенная эффективность" value={Number(calc.K2 || 0).toFixed(3)} />
         <Kpi title="[K1] коэффициент ответственности" value={Number(calc.K1 || 0).toFixed(3)} />
+        <Kpi title="SOFT_STOP — мягкий стоп-фактор" value={yesNo(calc.SOFT_STOP)} />
+        <Kpi title="HARD_STOP — жесткий стоп-фактор" value={yesNo(calc.HARD_STOP)} />
+        <Kpi title="[K3] коэфф. снижения вычета" value={Number(calc.K3 || 0).toFixed(3)} />
+        <Kpi title="Ставка премии от маржи [СТМ]" value={`${(Number(calc.sale_st || 0) * 100).toFixed(1)}%`} />
       </div>
-      <div className="formula-box">Формула расчета: [VIC] = (1 - [K2]) × [K1] × [DEMO_COST]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM] и участвует в карточке премии.</div>
+      <div className="formula-box">
+        [K2] = 0,45 × [xP] + 0,35 × [xR] + 0,20 × [xM].<br />
+        SOFT_STOP = да, если не выбран объект очистки, не подтверждены воздух/площадка или не согласованы критерии успеха. HARD_STOP = да, если карточка подготовки отсутствует или управленческий блок равен нулю.<br />
+        [K3] = 1 при HARD_STOP; max([K1]; 0,80) при SOFT_STOP; max([K1]; 0,20) без стоп-факторов.<br />
+        Уменьшение премии / Вычет [VIC], NET руб. = [DEMO_COST] × [K3] × [СТМ]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM].
+      </div>
       <div className="card totals-card">
-        <Kpi title="Уменьшение премии, NET руб. (наличных на карте) [VIC]" value={money(calc.VIC)} />
+        <Kpi title="Вычет из маржи демонстрации, руб. без НДС" value={money(calc.deduction_margin_net)} />
+        <Kpi title="Уменьшение премии / Вычет [VIC], NET руб." value={money(calc.VIC)} />
         <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money(confirmed)} />
       </div>
     </div>
@@ -867,8 +906,8 @@ function PremiumSalesTable({ rows }) {
 function PremiumDemoTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
-    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Вычет расчетный [VIC], руб.</th><th>Подтвержденное уменьшение премии [VIC_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Вычет расчетный [VIC], руб."])}</td><td className="align-right strong">{money(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Уменьшение премии / Вычет [VIC], NET руб.</th><th>Подтвержденное уменьшение премии [VIC_CONFIRM], руб.</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Уменьшение премии / Вычет [VIC], NET руб."])}</td><td className="align-right strong">{money(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
