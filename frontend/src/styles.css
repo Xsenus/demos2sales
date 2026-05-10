@@ -439,3 +439,36 @@ input:disabled,textarea:disabled,select:disabled,input[readonly]{background:var(
 @media (max-width:860px){
   body{overflow:auto}.app-shell{display:block;height:auto;min-height:100vh}.sidebar{width:100%;min-height:auto;overflow:visible}.nav.top-tabs{flex:none}.main{height:auto;min-height:100vh}.topbar{position:sticky;top:0;z-index:10}.content{overflow:visible;padding:18px}.actions-layout{grid-template-columns:1fr;min-height:auto}.panel-resizer{display:none}.action-list{max-height:none}.detail-panel{overflow:visible}.grid.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.compact-cards,.compact-kpi,.six-kpi,.driver-summary-grid,.sale-kpi,.premium-kpi,.totals-card,.list-totals{grid-template-columns:1fr!important}.fields-grid.two,.fields-grid.three,.fields-grid.four,.compact-info-grid,.confirm-grid,.one-line-confirm,.demo-hours-row,.sale-info-grid{grid-template-columns:1fr}.span-2,.span-3,.span-4{grid-column:span 1}.criteria-grid-head,.criterion-row{grid-template-columns:1fr}.products-actions{flex-wrap:wrap;justify-content:flex-start}.sale-products-card .sale-search-row{grid-template-columns:1fr}.sale-products-card .sale-search-row input,.sale-products-card .sale-search-row button{grid-column:auto}.topbar-actions .header-profile{display:none}
 }
+
+/* v7 additions */
+.sidebar-toggle{
+  position:absolute;
+  right:10px;
+  top:10px;
+  z-index:5;
+  width:30px;
+  height:30px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.08);
+  color:#e2e8f0;
+  display:grid;
+  place-items:center;
+  font-size:22px;
+  font-weight:900;
+  box-shadow:none;
+}
+.sidebar{position:relative;transition:width .18s ease,padding .18s ease}
+.app-shell{transition:grid-template-columns .18s ease}
+.app-shell.sidebar-collapsed{grid-template-columns:72px minmax(0,1fr)}
+.app-shell.sidebar-collapsed .sidebar{padding:48px 10px 14px;align-items:center}
+.app-shell.sidebar-collapsed .brand{justify-content:center;padding-bottom:14px;margin-bottom:14px;width:100%}
+.app-shell.sidebar-collapsed .brand-copy,.app-shell.sidebar-collapsed .nav-text,.app-shell.sidebar-collapsed .count,.app-shell.sidebar-collapsed .sidebar-card{display:none}
+.app-shell.sidebar-collapsed .logo{width:42px;height:42px;flex-basis:42px}
+.app-shell.sidebar-collapsed .nav.top-tabs{width:100%;align-items:center;padding-right:0;flex:none}
+.app-shell.sidebar-collapsed .nav .tab-btn{width:48px;height:48px;padding:0;justify-content:center}
+.app-shell.sidebar-collapsed .nav .ico{margin:0;background:rgba(255,255,255,.12)}
+.app-shell.sidebar-collapsed .sidebar-toggle{right:50%;transform:translateX(50%)}
+.profile-menu{z-index:1000}.header-profile{z-index:999}.topbar{overflow:visible;z-index:40}
+.demo-report-box{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-height:38px}.report-file-name{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900;color:#172033;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px 11px}.stop-tag{display:inline-flex;margin-left:7px;padding:2px 6px;border-radius:999px;font-size:10px;font-weight:900;vertical-align:middle;letter-spacing:.02em}.stop-tag.soft{background:#fef3c7;color:#92400e;border:1px solid #fde68a}.stop-tag.hard{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}.product-row-actions{display:inline-flex!important;flex-wrap:nowrap!important;white-space:nowrap;gap:4px}.products-resize-hint{margin:-8px 0 10px}.products-table{table-layout:fixed}.products-table th,.products-table td{overflow:hidden;text-overflow:ellipsis}.resizable-th{position:relative;user-select:none}.resizable-th>span{display:block;overflow:hidden;text-overflow:ellipsis}.col-resize-handle{position:absolute;right:-3px;top:0;width:8px;height:100%;cursor:col-resize;background:transparent;z-index:4}.col-resize-handle:hover{background:rgba(37,99,235,.18)}body.is-resizing-products{cursor:col-resize;user-select:none}
+@media (max-width:860px){.app-shell.sidebar-collapsed{display:block}.app-shell.sidebar-collapsed .sidebar{width:100%;align-items:stretch;padding:18px 16px}.app-shell.sidebar-collapsed .brand-copy,.app-shell.sidebar-collapsed .nav-text,.app-shell.sidebar-collapsed .count,.app-shell.sidebar-collapsed .sidebar-card{display:block}.sidebar-toggle{display:none}}

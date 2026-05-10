@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 
 const ACTION_DEMO = "Проведенная демонстрация";
@@ -47,6 +47,45 @@ const savedActionListWidth = () => {
   return Number.isFinite(stored) && stored > 0 ? clampActionListWidth(stored) : null;
 };
 
+const readSavedUser = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem("demos2sales.currentUser");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+const readSavedSidebarCollapsed = () => {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("demos2sales.sidebarCollapsed") === "1";
+};
+const productColumnsStorageKey = (login) => `demos2sales.products.columnWidths.${login || "director"}`;
+const defaultProductColumnWidths = {
+  order: 74,
+  sku: 170,
+  name: 360,
+  price_vat: 160,
+  price_net: 160,
+  mr: 150,
+  pr: 170,
+  st: 155,
+};
+const readProductColumnWidths = (login) => {
+  if (typeof window === "undefined") return { ...defaultProductColumnWidths };
+  try {
+    const raw = window.localStorage.getItem(productColumnsStorageKey(login));
+    return { ...defaultProductColumnWidths, ...(raw ? JSON.parse(raw) : {}) };
+  } catch {
+    return { ...defaultProductColumnWidths };
+  }
+};
+const stopTagForCriterion = (code) => {
+  if (["P2", "P4", "P5"].includes(String(code))) return "SOFT_STOP";
+  if (String(code) === "P8") return "HARD_STOP";
+  return "";
+};
+
 function useNotice() {
   const [notice, setNotice] = useState({ type: "", text: "" });
   const show = (text, type = "info") => setNotice({ text, type });
@@ -54,9 +93,12 @@ function useNotice() {
 }
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => readSavedUser());
   const [managerChoices, setManagerChoices] = useState([]);
-  const [managerFilter, setManagerFilter] = useState("__all__");
+  const [managerFilter, setManagerFilter] = useState(() => {
+    const saved = readSavedUser();
+    return saved?.role === "manager" ? saved.login : "__all__";
+  });
   const [mainTab, setMainTab] = useState("actions");
   const [actions, setActions] = useState([]);
   const [hideOldActions, setHideOldActions] = useState(false);
@@ -71,6 +113,7 @@ function App() {
   const [selectedProductId, setSelectedProductId] = useState("");
   const [demoTab, setDemoTab] = useState("estimate");
   const [actionListWidth, setActionListWidth] = useState(savedActionListWidth);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSavedSidebarCollapsed);
   const [loginForm, setLoginForm] = useState({ login: "", password: "" });
   const { notice, show, clear } = useNotice();
 
@@ -141,6 +184,10 @@ function App() {
       clear();
     } catch (e) {
       show(e.message, "error");
+      if (String(e.message || "").includes("Неизвестный пользователь")) {
+        window.localStorage.removeItem("demos2sales.currentUser");
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -149,6 +196,12 @@ function App() {
   useEffect(() => {
     if (user) loadBootstrap(user, managerFilter, hideOldActions);
   }, [user, managerFilter, hideOldActions]);
+
+  useEffect(() => {
+    if (user?.role !== "director" && mainTab !== "actions") {
+      setMainTab("actions");
+    }
+  }, [user, mainTab]);
 
   useEffect(() => {
     if (user && selectedActionId) {
@@ -215,6 +268,7 @@ function App() {
     e.preventDefault();
     try {
       const data = await api.login(loginForm.login, loginForm.password);
+      window.localStorage.setItem("demos2sales.currentUser", JSON.stringify(data.user));
       setUser(data.user);
       setManagerFilter(data.user.role === "director" ? "__all__" : data.user.login);
       show(`Вход выполнен: ${data.user.name}`, "success");
@@ -341,6 +395,41 @@ function App() {
     }
   };
 
+  const uploadDemoReport = async (file) => {
+    if (!user || !editor?.id || !file) return;
+    try {
+      const res = await api.uploadDemoReport(user.login, editor.id, file);
+      setDetail(res.action);
+      setEditor(clone(res.action.action));
+      show("Отчет по демонстрации загружен", "success");
+    } catch (e) {
+      show(e.message, "error");
+    }
+  };
+
+  const deleteDemoReport = async () => {
+    if (!user || !editor?.id) return;
+    if (!window.confirm("Удалить отчет по демонстрации?")) return;
+    try {
+      const res = await api.deleteDemoReport(user.login, editor.id);
+      setDetail(res.action);
+      setEditor(clone(res.action.action));
+      show("Отчет удален", "success");
+    } catch (e) {
+      show(e.message, "error");
+    }
+  };
+
+  const downloadDemoReport = async () => {
+    if (!user || !editor?.id) return;
+    const report = editor.demo_report || editor.payload?.demo_report || {};
+    try {
+      await api.downloadDemoReport(user.login, editor.id, report.original_name || "demo_report");
+    } catch (e) {
+      show(e.message, "error");
+    }
+  };
+
   const updateEditorField = (field, value) => setEditor((prev) => ({ ...prev, [field]: value }));
   const updateDirectorFields = (field, value) => setEditor((prev) => ({ ...prev, [field]: value }));
   const updateDemoMeta = (field, value) => setEditor((prev) => ({ ...prev, demo_meta: { ...(prev.demo_meta || {}), [field]: value } }));
@@ -386,6 +475,7 @@ function App() {
     criteria: { ...(prev.criteria || {}), [code]: { ...(prev.criteria?.[code] || {}), ...patch } },
   }));
   const logout = () => {
+    window.localStorage.removeItem("demos2sales.currentUser");
     setUser(null);
     setManagerChoices([]);
     setManagerFilter("__all__");
@@ -400,6 +490,13 @@ function App() {
     setProductSuggestions([]);
     setSelectedProductId("");
     show("Вы вышли из системы", "info");
+  };
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem("demos2sales.sidebarCollapsed", next ? "1" : "0");
+      return next;
+    });
   };
   const userRoleLabel = user ? (user.role === "director" ? "Директор" : `Менеджер · ${user.office_city || ""}`) : "";
   const activePageTitle = user ? (mainTab === "settings" ? "Настройки" : mainTab === "products" ? "Товары" : "Действия") : "";
@@ -431,8 +528,9 @@ function App() {
   }
 
   return (
-    <div className="app app-shell" style={pageStyle}>
+    <div className={`app app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={pageStyle}>
       <aside className="sidebar">
+        <button className="sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}>{sidebarCollapsed ? "›" : "‹"}</button>
         <div className="brand">
           <div className="logo" aria-hidden="true">И</div>
           <div className="brand-copy">
@@ -558,6 +656,9 @@ function App() {
                         updateDemoMeta={updateDemoMeta}
                         updateExpenseRow={updateExpenseRow}
                         updateCriterion={updateCriterion}
+                        uploadDemoReport={uploadDemoReport}
+                        deleteDemoReport={deleteDemoReport}
+                        downloadDemoReport={downloadDemoReport}
                         settings={settings}
                         user={user}
                       />
@@ -593,7 +694,7 @@ function App() {
   );
 }
 
-function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, updateDemoMeta, updateExpenseRow, updateCriterion, settings, user }) {
+function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, updateDemoMeta, updateExpenseRow, updateCriterion, uploadDemoReport, deleteDemoReport, downloadDemoReport, settings, user }) {
   const calc = detail.calc || {};
   const expenseMap = useMemo(() => Object.fromEntries((settings?.expense_settings || []).map((row, index) => [expenseKey(row, index), row])), [settings]);
   const criteriaBlocks = detail.criteria_blocks || { P: [], R: [], M: [] };
@@ -602,6 +703,9 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
   const readonly = !!editor.is_locked || (user.role !== "director" && !!editor.is_director_confirmed);
   const demoHours = editor.demo_meta?.demo_hours ?? 2;
   const driverPrepHours = editor.demo_meta?.driver_prep_hours ?? 2;
+  const reportInputRef = useRef(null);
+  const demoReport = editor.demo_report || editor.payload?.demo_report || null;
+  const canManageReport = !editor.is_director_confirmed && !editor.is_locked && !readonly;
   return (
     <div className="stack-gap">
       <div className="card fields-grid compact-info-grid">
@@ -616,6 +720,22 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
         <Field label="Модель"><input value={editor.model || ""} disabled={readonly} onChange={(e) => updateEditorField("model", e.target.value)} /></Field>
         <Field label="Описание задачи" className="span-2"><textarea value={editor.task_description || ""} disabled={readonly} onChange={(e) => updateEditorField("task_description", e.target.value)} /></Field>
         <Field label="Комментарий менеджера" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
+        <Field label="Отчет по демонстрации" className="span-2">
+          <div className="demo-report-box">
+            {!demoReport ? (
+              <>
+                <button type="button" className="ghost" disabled={!canManageReport} onClick={() => reportInputRef.current?.click()}>Загрузить один файл отчета по демонстрации</button>
+                <input ref={reportInputRef} type="file" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadDemoReport(file); e.target.value = ""; }} />
+              </>
+            ) : (
+              <>
+                <div className="report-file-name" title={demoReport.original_name}>{demoReport.original_name}</div>
+                <button type="button" className="danger" disabled={!canManageReport} onClick={deleteDemoReport}>Удалить отчет</button>
+                <button type="button" className="ghost" onClick={downloadDemoReport}>Скачать отчет</button>
+              </>
+            )}
+          </div>
+        </Field>
       </div>
 
       <div className="card demo-hours-row">
@@ -809,9 +929,10 @@ function ExpenseSection({ title, rows, allRows, expenseMap, updateExpenseRow, re
 
 function CriterionRow({ criterion, editorValue, onLevel, onComment, readonly }) {
   const levelCount = criterion.levels?.length || 1;
+  const stopTag = stopTagForCriterion(criterion.code);
   return (
     <div className="criterion-row">
-      <div className="criterion-about"><div className="criterion-code">{criterion.code}</div><div className="criterion-title">{criterion.title}</div><div className="criterion-desc">{criterion.desc}</div></div>
+      <div className="criterion-about"><div className="criterion-code">{criterion.code}</div><div className="criterion-title">{criterion.title}{stopTag ? <span className={`stop-tag ${stopTag === "HARD_STOP" ? "hard" : "soft"}`}>[{stopTag}]</span> : null}</div><div className="criterion-desc">{criterion.desc}</div></div>
       <div className="criterion-levels">
         {criterion.levels.map((level, idx) => (
           <button key={`${criterion.code}-${idx}`} disabled={readonly} className={`level-box level-tone-${Math.round((idx / Math.max(1, levelCount - 1)) * 4)} ${Number(editorValue.level_index) === idx ? "active" : ""}`} onClick={() => onLevel(idx)}>
@@ -980,7 +1101,7 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
         <div className="sub-tabs"><TabButton active={criteriaTab === "P"} onClick={() => setCriteriaTab("P")}>P — Подготовка</TabButton><TabButton active={criteriaTab === "R"} onClick={() => setCriteriaTab("R")}>R — Результат</TabButton><TabButton active={criteriaTab === "M"} onClick={() => setCriteriaTab("M")}>M — Управленческий</TabButton></div>
         <div className="table-shell"><table className="dense-table"><thead><tr><th>Код</th><th>Критерий</th><th>Уровни и баллы</th></tr></thead><tbody>
           {settings.criteria.filter((criterion) => criterion.block === criteriaTab).map((criterion) => (
-            <tr key={criterion.code}><td>{criterion.code}</td><td><div className="row-title">{criterion.title}</div><div className="muted tiny">{criterion.desc}</div></td><td><div className="levels-editor">
+            <tr key={criterion.code}><td>{criterion.code}</td><td><div className="row-title">{criterion.title}{stopTagForCriterion(criterion.code) ? <span className={`stop-tag ${stopTagForCriterion(criterion.code) === "HARD_STOP" ? "hard" : "soft"}`}>[{stopTagForCriterion(criterion.code)}]</span> : null}</div><div className="muted tiny">{criterion.desc}</div></td><td><div className="levels-editor">
               {criterion.levels.map((level, lIndex) => <div key={`${criterion.code}-${lIndex}`} className="level-edit-box"><div className="muted tiny">{level[0]}</div><input type="number" disabled={!isDirector} value={level[1]} onChange={(e) => updateCriterionScore(criterion.code, lIndex, Number(e.target.value || 0))} /></div>)}
             </div></td></tr>
           ))}
@@ -1001,11 +1122,11 @@ function OfficeRatesTable({ cities, settings, isDirector, updateOfficeRate, comp
   return (
     <div className={`office-rates ${compact ? "compact-rates" : ""}`}>
       <table className="dense-table">
-        <thead><tr><th>Офис продаж</th><th>Работа водителя за километраж</th><th>Демонстрация криобластера</th><th>Амортизация Газели и ТО</th><th>ST продажи, %</th><th>Широта</th><th>Долгота</th></tr></thead>
+        <thead><tr><th>Офис продаж</th><th>Работа водителя за километраж</th><th>Работа демонстратора*</th><th>Демонстрация криобластера</th><th>Амортизация Газели и ТО</th><th>ST продажи, %</th><th>Широта</th><th>Долгота</th></tr></thead>
         <tbody>
           {cities.map((city) => {
             const row = settings.office_rates?.[city] || {};
-            return <tr key={city}><td className="row-title">{city}</td><td><input type="number" disabled={!isDirector} value={row.driver_km_rate ?? 0} onChange={(e) => updateOfficeRate(city, "driver_km_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.cryoblaster_rate ?? 0} onChange={(e) => updateOfficeRate(city, "cryoblaster_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.gazelle_rate ?? 0} onChange={(e) => updateOfficeRate(city, "gazelle_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={pctUi(row.sale_st ?? 0)} onChange={(e) => updateOfficeRate(city, "sale_st", fromPctUi(e.target.value))} /></td><td><input type="number" step="0.000001" disabled={!isDirector} value={row.latitude ?? 0} onChange={(e) => updateOfficeRate(city, "latitude", plainNum(e.target.value))} /></td><td><input type="number" step="0.000001" disabled={!isDirector} value={row.longitude ?? 0} onChange={(e) => updateOfficeRate(city, "longitude", plainNum(e.target.value))} /></td></tr>;
+            return <tr key={city}><td className="row-title">{city}</td><td><input type="number" disabled={!isDirector} value={row.driver_km_rate ?? 0} onChange={(e) => updateOfficeRate(city, "driver_km_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.demo_work_rate ?? 1350} onChange={(e) => updateOfficeRate(city, "demo_work_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.cryoblaster_rate ?? 0} onChange={(e) => updateOfficeRate(city, "cryoblaster_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={row.gazelle_rate ?? 0} onChange={(e) => updateOfficeRate(city, "gazelle_rate", plainNum(e.target.value))} /></td><td><input type="number" disabled={!isDirector} value={pctUi(row.sale_st ?? 0)} onChange={(e) => updateOfficeRate(city, "sale_st", fromPctUi(e.target.value))} /></td><td><input type="number" step="0.000001" disabled={!isDirector} value={row.latitude ?? 0} onChange={(e) => updateOfficeRate(city, "latitude", plainNum(e.target.value))} /></td><td><input type="number" step="0.000001" disabled={!isDirector} value={row.longitude ?? 0} onChange={(e) => updateOfficeRate(city, "longitude", plainNum(e.target.value))} /></td></tr>;
           })}
         </tbody>
       </table>
@@ -1032,6 +1153,41 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
   const isDirector = user.role === "director";
   const cities = officeNames(settings);
   const [selectedCity, setSelectedCity] = useState(cities[0] || "Казань");
+  const [columnWidths, setColumnWidths] = useState(() => readProductColumnWidths(user.login));
+  const columns = [
+    ["order", ""],
+    ["sku", "Артикул"],
+    ["name", "Наименование"],
+    ["price_vat", "Цена с НДС (прайс) [PR0]"],
+    ["price_net", "Цена без НДС (прайс)"],
+    ["mr", "Маржа без НДС [MR]"],
+    ["pr", "Макс. премия NET [PR]"],
+    ["st", "Ставка премии от маржи [ST]"],
+  ];
+  const saveWidths = (next) => {
+    setColumnWidths(next);
+    window.localStorage.setItem(productColumnsStorageKey(user.login), JSON.stringify(next));
+  };
+  const startColumnResize = (key, event) => {
+    if (!isDirector || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = Number(columnWidths[key] || defaultProductColumnWidths[key] || 140);
+    const onMove = (moveEvent) => {
+      const width = Math.max(60, Math.min(720, Math.round(startWidth + moveEvent.clientX - startX)));
+      saveWidths({ ...columnWidths, [key]: width });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("is-resizing-products");
+    };
+    document.body.classList.add("is-resizing-products");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  };
+  const colStyle = (key) => ({ width: `${columnWidths[key] || defaultProductColumnWidths[key]}px`, minWidth: `${columnWidths[key] || defaultProductColumnWidths[key]}px` });
   const moveProduct = (index, direction) => setProducts((prev) => {
     const next = clone(prev);
     const target = direction === "up" ? index - 1 : index + 1;
@@ -1046,15 +1202,20 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
           <h3>Справочник товаров</h3>
           <div className="mini-actions products-actions"><select className="city-select" value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select><a className="ghost button-link" href={`${api.baseUrl}/api/products/template`} target="_blank" rel="noreferrer">Скачать excel</a>{isDirector && <label className="ghost file-btn">Импорт excel<input type="file" accept=".xlsx,.csv" hidden onChange={(e) => importProducts(e.target.files?.[0])} /></label>}{isDirector && <button className="primary" onClick={saveProducts}>Сохранить порядок</button>}</div>
         </div>
-        <div className="table-shell"><table className="dense-table"><thead><tr><th></th><th>Артикул</th><th>Наименование</th><th>Цена с НДС (прайс) [PR0]</th><th>Цена без НДС (прайс)</th><th>Маржа без НДС [MR]</th><th>Макс. премия NET [PR]</th><th>Ставка премии от маржи [ST]</th></tr></thead><tbody>
+        <div className="muted tiny products-resize-hint">Ширину колонок можно менять перетаскиванием правой границы заголовка. Настройка сохраняется для директора в браузере.</div>
+        <div className="table-shell products-table-shell"><table className="dense-table products-table"><thead><tr>{columns.map(([key, label]) => <ResizableTh key={key} style={colStyle(key)} onResize={(event) => startColumnResize(key, event)}>{label}</ResizableTh>)}</tr></thead><tbody>
           {products.map((row, index) => {
             const params = row.office_params?.[selectedCity] || row.city_params?.[selectedCity] || {};
-            return <tr key={`${row.product_id}-${index}`}><td><div className="mini-actions"><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "up")}>↑</button><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "down")}>↓</button></div></td><td>{row.sku}</td><td>{row.name}</td><td className="align-right">{money(row.price_vat)}</td><td className="align-right">{money(row.price_net)}</td><td className="align-right">{money(params.mr)}</td><td className="align-right">{money(params.pr)}</td><td className="align-right">{percent(params.st)}</td></tr>;
+            return <tr key={`${row.product_id}-${index}`}><td style={colStyle("order")}><div className="mini-actions product-row-actions"><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "up")}>↑</button><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "down")}>↓</button></div></td><td style={colStyle("sku")}>{row.sku}</td><td style={colStyle("name")}>{row.name}</td><td style={colStyle("price_vat")} className="align-right">{money(row.price_vat)}</td><td style={colStyle("price_net")} className="align-right">{money(row.price_net)}</td><td style={colStyle("mr")} className="align-right">{money(params.mr)}</td><td style={colStyle("pr")} className="align-right">{money(params.pr)}</td><td style={colStyle("st")} className="align-right">{percent(params.st)}</td></tr>;
           })}
         </tbody></table></div>
       </div>
     </div>
   );
+}
+
+function ResizableTh({ children, style, onResize }) {
+  return <th className="resizable-th" style={style}><span>{children}</span><i className="col-resize-handle" onPointerDown={onResize} /></th>;
 }
 
 function DateInput({ value, disabled, onChange }) {

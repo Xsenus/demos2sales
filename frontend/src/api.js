@@ -22,6 +22,34 @@ async function request(path, { method = "GET", headers = {}, body, userLogin, is
   return data;
 }
 
+async function downloadRequest(path, { userLogin, filename = "download" } = {}) {
+  const headers = {};
+  if (userLogin) headers["X-User-Login"] = userLogin;
+  const response = await fetch(`${API_BASE}${path}`, { method: "GET", headers });
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const data = await response.json();
+      message = data?.detail || message;
+    } catch {
+      // keep default message
+    }
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  const suggested = match ? decodeURIComponent(match[1] || match[2] || filename) : filename;
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = suggested || filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export const api = {
   baseUrl: API_BASE,
   login: (login, password) => request("/api/auth/login", { method: "POST", body: { login, password } }),
@@ -37,6 +65,13 @@ export const api = {
   searchProducts: (userLogin, q) => request(`/api/products/search?q=${encodeURIComponent(q)}`, { userLogin }),
   addProductToSale: (userLogin, actionId, productId) => request(`/api/actions/${actionId}/sale-rows/add-product`, { method: "POST", userLogin, body: { product_id: productId } }),
   saleRowCommand: (userLogin, actionId, command, index) => request(`/api/actions/${actionId}/sale-rows/command`, { method: "POST", userLogin, body: { command, index } }),
+  uploadDemoReport: (userLogin, actionId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return request(`/api/actions/${actionId}/demo-report`, { method: "POST", userLogin, body: fd, isForm: true, headers: {} });
+  },
+  deleteDemoReport: (userLogin, actionId) => request(`/api/actions/${actionId}/demo-report`, { method: "DELETE", userLogin }),
+  downloadDemoReport: (userLogin, actionId, filename) => downloadRequest(`/api/actions/${actionId}/demo-report/download`, { userLogin, filename }),
   addDemoExpenseRow: (userLogin, actionId) => request(`/api/actions/${actionId}/demo-expenses/add-row`, { method: "POST", userLogin }),
   demoExpenseCommand: (userLogin, actionId, command, index) => request(`/api/actions/${actionId}/demo-expenses/command`, { method: "POST", userLogin, body: { command, index } }),
   products: (userLogin) => request("/api/products", { userLogin }),
