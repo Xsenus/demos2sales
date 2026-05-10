@@ -23,7 +23,7 @@
     "qty_manager": false,
     "price_manager": false,
     "calc_type": "demo_work_total",
-    "comment": "Количество = время на административные процедуры + время работы на демонстрации; НПД считается через 0.94"
+    "comment": "Количество = время на административные процедуры + время работы на демонстрации; ставка NET на руки подставляется по офису менеджера; НПД считается через 0.94"
   },
   {
     "code": "d_night_compensation",
@@ -202,7 +202,7 @@
     "qty_default": 0,
     "price_net_default": 0,
     "price_vat_default": 72,
-    "qty_manager": false,
+    "qty_manager": true,
     "price_manager": true,
     "calc_type": "diesel",
     "comment": "Количество = километраж / 100 × 15; цена с НДС вводится менеджером"
@@ -218,7 +218,7 @@
     "qty_manager": false,
     "price_manager": false,
     "calc_type": "office_gazelle_amort_total",
-    "comment": "Административная ставка подставляется по офису менеджера"
+    "comment": "Количество корректирует менеджер; административная ставка подставляется по офису менеджера"
   },
   {
     "code": "o_dry_ice_purchase",

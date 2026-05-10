@@ -75,3 +75,5 @@ frontend/.env
 
 # Local helper files
 deploy/keys/
+backend/uploads/demo_reports/*
+!backend/uploads/demo_reports/.gitkeep

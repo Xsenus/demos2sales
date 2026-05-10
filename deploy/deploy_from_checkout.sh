@@ -50,7 +50,7 @@ command -v python3 >/dev/null 2>&1 || { echo "python3 is required"; exit 1; }
 command -v npm >/dev/null 2>&1 || { echo "npm is required"; exit 1; }
 command -v systemctl >/dev/null 2>&1 || { echo "systemctl is required"; exit 1; }
 
-mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/data" "${BACKUPS_DIR}"
+mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/data" "${SHARED_DIR}/uploads/demo_reports" "${BACKUPS_DIR}"
 
 if [[ ! -f "${SHARED_DIR}/.env" ]]; then
   echo "Missing ${SHARED_DIR}/.env. Create it from .env.example before deploy." >&2

@@ -2,6 +2,7 @@ import io
 import json
 import math
 import os
+import shutil
 import traceback
 import uuid
 from copy import deepcopy
@@ -14,12 +15,13 @@ import pandas as pd
 import psycopg2
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from psycopg2.extras import Json, RealDictCursor, execute_values
 
 BASE_DIR = Path(__file__).resolve().parent
 JSON_BACKUP_PATH = os.getenv("DEMO_CALC_JSON_BACKUP_PATH", str(BASE_DIR / "state_backup.json"))
+REPORTS_DIR = Path(os.getenv("DEMO_CALC_REPORTS_DIR", str(BASE_DIR / "uploads" / "demo_reports"))).resolve()
 
 DB_HOST = os.getenv("DEMO_CALC_DB_HOST", "127.0.0.1")
 DB_PORT = int(os.getenv("DEMO_CALC_DB_PORT", "5464"))
@@ -293,8 +295,8 @@ def default_office_rates() -> Dict[str, Dict[str, float]]:
     # Три административные ставки из Excel-калькулятора зависят от офиса менеджера.
     # Для Москвы значения взяты из примера «Москва 300 км»: 20 / 6000 / 22000.
     return {
-        "Казань": {"driver_km_rate": 15.0, "cryoblaster_rate": 4000.0, "gazelle_rate": 18000.0, "sale_st": 0.565, "latitude": 55.796127, "longitude": 49.106414},
-        "Москва": {"driver_km_rate": 20.0, "cryoblaster_rate": 6000.0, "gazelle_rate": 22000.0, "sale_st": 0.465, "latitude": 55.7987966, "longitude": 37.965255},
+        "Казань": {"driver_km_rate": 15.0, "demo_work_rate": 1350.0, "cryoblaster_rate": 4000.0, "gazelle_rate": 18000.0, "sale_st": 0.565, "latitude": 55.796127, "longitude": 49.106414},
+        "Москва": {"driver_km_rate": 20.0, "demo_work_rate": 1350.0, "cryoblaster_rate": 6000.0, "gazelle_rate": 22000.0, "sale_st": 0.465, "latitude": 55.7987966, "longitude": 37.965255},
     }
 
 
@@ -362,7 +364,10 @@ def merge_settings(settings: Any) -> Dict[str, Any]:
         if row.get("code") == "d_cryoblaster":
             row["article"] = "Демонстрация криобластера (1 демо = 1 точка Газели)"
         if row.get("code") == "d_demo_work":
-            row["comment"] = "Количество = время на административные процедуры + время работы на демонстрации; НПД считается через 0.94"
+            row["comment"] = "Количество = время на административные процедуры + время работы на демонстрации; ставка NET на руки подставляется по офису менеджера; НПД считается через 0.94"
+        if row.get("code") == "o_gazelle_amort":
+            row["qty_manager"] = True
+            row["comment"] = "Количество корректирует менеджер; административная ставка подставляется по офису менеджера"
 
     names = office_names(base)
     default_rates = default_office_rates()
@@ -372,8 +377,9 @@ def merge_settings(settings: Any) -> Dict[str, Any]:
         base["diesel_l_per_100km"] = 15.0
     rates = base.setdefault("office_rates", {})
     for name in names:
-        rates.setdefault(name, deepcopy(default_rates.get(name, {"driver_km_rate": 15, "cryoblaster_rate": 4000, "gazelle_rate": 18000, "sale_st": 0.50, "latitude": 0.0, "longitude": 0.0})))
+        rates.setdefault(name, deepcopy(default_rates.get(name, {"driver_km_rate": 15, "demo_work_rate": 1350, "cryoblaster_rate": 4000, "gazelle_rate": 18000, "sale_st": 0.50, "latitude": 0.0, "longitude": 0.0})))
         rates[name].setdefault("driver_km_rate", default_rates.get(name, {}).get("driver_km_rate", 15.0))
+        rates[name].setdefault("demo_work_rate", default_rates.get(name, {}).get("demo_work_rate", 1350.0))
         rates[name].setdefault("cryoblaster_rate", default_rates.get(name, {}).get("cryoblaster_rate", 4000.0))
         rates[name].setdefault("gazelle_rate", default_rates.get(name, {}).get("gazelle_rate", 18000.0))
         rates[name].setdefault("sale_st", default_rates.get(name, {}).get("sale_st", 0.50))
@@ -701,8 +707,7 @@ def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[D
             default_km = qty
         elif calc_type == "demo_work_total":
             qty = prep_hours + demo_hours
-            if price_net <= 0:
-                price_net = 1350
+            price_net = office_rate(settings, office_city, "demo_work_rate", price_net or 1350)
             price_vat = 0
         elif calc_type == "npd_cash_input":
             price_net = qty
@@ -716,7 +721,8 @@ def normalize_demo_rows(action: Dict[str, Any], state: Dict[str, Any]) -> List[D
                 price_vat = to_float(s.get("price_vat_default"), 72)
             price_net = price_vat / (1 + vat) if price_vat else 0
         elif calc_type == "office_gazelle_amort_total":
-            qty = to_float(s.get("qty_default"), 1) or 1
+            if not bool(s.get("qty_manager", True)):
+                qty = to_float(s.get("qty_default"), 1) or 1
             price_net = office_rate(settings, office_city, "gazelle_rate", price_net or 18000)
             price_vat = price_net * (1 + vat)
 
@@ -1383,6 +1389,7 @@ def serialize_action_detail(action: Dict[str, Any], state: Dict[str, Any]) -> Di
     base["manager_office_city"] = manager_office_city(state, action.get("manager_login"))
     if action["type"] == ACTION_DEMO:
         base["demo_meta"] = get_demo_meta(action)
+        base["demo_report"] = (action.get("payload") or {}).get("demo_report")
         calc = calculate_demo(action, state)
         # В карточку отдаем уже нормализованную фиксированную смету из Excel-логики,
         # чтобы старые БД с 3 строками автоматически раскрывались до полной сметы.
@@ -1397,6 +1404,37 @@ def serialize_action_detail(action: Dict[str, Any], state: Dict[str, Any]) -> Di
         calc = calculate_premium(action, state)
         result = {"action": base, "kind": "premium", "calc": calc}
     return clean_json(result)
+
+
+def action_report_dir(action_id: str) -> Path:
+    safe = "".join(ch for ch in str(action_id) if ch.isalnum() or ch in {"-", "_"}) or "unknown"
+    return REPORTS_DIR / safe
+
+
+def report_file_path(meta: Dict[str, Any]) -> Optional[Path]:
+    stored = str((meta or {}).get("stored_name") or "").strip()
+    if not stored:
+        return None
+    path = (REPORTS_DIR / stored).resolve()
+    if not str(path).startswith(str(REPORTS_DIR)):
+        return None
+    return path
+
+
+def safe_original_filename(filename: str) -> str:
+    name = Path(str(filename or "report")).name.strip() or "report"
+    return "".join(ch for ch in name if ch.isalnum() or ch in {" ", ".", "_", "-", "(", ")", "[", "]"}).strip() or "report"
+
+
+def can_access_action(user: Dict[str, Any], action: Dict[str, Any]) -> bool:
+    return user.get("role") == "director" or action.get("manager_login") == user.get("login")
+
+
+def remove_demo_report_file(action: Dict[str, Any]) -> None:
+    meta = ((action.get("payload") or {}).get("demo_report") or {})
+    path = report_file_path(meta)
+    if path and path.exists():
+        path.unlink()
 
 
 # ==============================
@@ -1456,7 +1494,7 @@ app.add_middleware(
 @app.get("/api/health")
 def api_health():
     state, msg = load_state_from_db()
-    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v3.1"})
+    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v7"})
 
 
 @app.post("/api/auth/login")
@@ -1530,6 +1568,73 @@ def api_move_action(action_id: str, body: MoveIn, user: Dict[str, Any] = Depends
     move_action(state, user, action_id, body.direction)
     persist_state_to_db(state)
     return clean_json({"ok": True, "actions": visible_actions(user, state, "__all__" if user["role"] == "director" else user["login"])})
+
+
+@app.post("/api/actions/{action_id}/demo-report")
+def api_upload_demo_report(action_id: str, file: UploadFile = File(...), user: Dict[str, Any] = Depends(get_user_from_header)):
+    state, _ = load_state_from_db()
+    action = find_action(state, action_id)
+    if not action or action.get("type") != ACTION_DEMO:
+        raise HTTPException(status_code=404, detail="Демонстрация не найдена")
+    if not can_access_action(user, action):
+        raise HTTPException(status_code=403, detail="Нет доступа к демонстрации")
+    if action.get("is_director_confirmed") or is_action_locked(action, state):
+        raise HTTPException(status_code=400, detail="Отчет нельзя загрузить после подтверждения демонстрации")
+    original_name = safe_original_filename(file.filename)
+    suffix = Path(original_name).suffix[:32]
+    safe_id = "".join(ch for ch in str(action_id) if ch.isalnum() or ch in {"-", "_"}) or "unknown"
+    stored_name = f"{safe_id}/{uuid.uuid4().hex}{suffix}"
+    target_dir = REPORTS_DIR / safe_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = (REPORTS_DIR / stored_name).resolve()
+    if not str(target).startswith(str(REPORTS_DIR)):
+        raise HTTPException(status_code=400, detail="Некорректное имя файла")
+    remove_demo_report_file(action)
+    with target.open("wb") as out:
+        shutil.copyfileobj(file.file, out)
+    meta = {
+        "original_name": original_name,
+        "stored_name": stored_name,
+        "mime_type": file.content_type or "application/octet-stream",
+        "size": target.stat().st_size,
+        "uploaded_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    action.setdefault("payload", {})["demo_report"] = meta
+    persist_state_to_db(state)
+    return clean_json({"ok": True, "report": meta, "action": serialize_action_detail(action, state)})
+
+
+@app.get("/api/actions/{action_id}/demo-report/download")
+def api_download_demo_report(action_id: str, user: Dict[str, Any] = Depends(get_user_from_header)):
+    state, _ = load_state_from_db()
+    action = find_action(state, action_id)
+    if not action or action.get("type") != ACTION_DEMO:
+        raise HTTPException(status_code=404, detail="Демонстрация не найдена")
+    if not can_access_action(user, action):
+        raise HTTPException(status_code=403, detail="Нет доступа к демонстрации")
+    meta = ((action.get("payload") or {}).get("demo_report") or {})
+    path = report_file_path(meta)
+    if not path or not path.exists():
+        raise HTTPException(status_code=404, detail="Файл отчета не найден")
+    return FileResponse(path, media_type=meta.get("mime_type") or "application/octet-stream", filename=meta.get("original_name") or "demo_report")
+
+
+@app.delete("/api/actions/{action_id}/demo-report")
+def api_delete_demo_report(action_id: str, user: Dict[str, Any] = Depends(get_user_from_header)):
+    state, _ = load_state_from_db()
+    action = find_action(state, action_id)
+    if not action or action.get("type") != ACTION_DEMO:
+        raise HTTPException(status_code=404, detail="Демонстрация не найдена")
+    if not can_access_action(user, action):
+        raise HTTPException(status_code=403, detail="Нет доступа к демонстрации")
+    if action.get("is_director_confirmed") or is_action_locked(action, state):
+        raise HTTPException(status_code=400, detail="Отчет нельзя удалить после подтверждения демонстрации")
+    if user["role"] != "director" and action.get("manager_login") != user["login"]:
+        raise HTTPException(status_code=403, detail="Нет прав")
+    remove_demo_report_file(action)
+    action.setdefault("payload", {}).pop("demo_report", None)
+    persist_state_to_db(state)
+    return clean_json({"ok": True, "action": serialize_action_detail(action, state)})
 
 
 @app.post("/api/actions/{action_id}/sale-rows/add-product")
