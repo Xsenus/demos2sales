@@ -566,18 +566,18 @@ function App() {
       <section className="main">
         <header className="topbar horizontal-topbar">
           <div className="topbar-brand">
-            <div className="logo" aria-hidden="true">Р</div>
+            <div className="logo" aria-hidden="true">И</div>
             <div className="brand-copy">
-              <h1>РР Р‘РРЎРўР•РҐ</h1>
-              <p>Р”РµРјРѕРЅСЃС‚СЂР°С†РёРё В· РїСЂРѕРґР°Р¶Рё В· РїСЂРµРјРёРё</p>
+              <h1>ИРБИСТЕХ</h1>
+              <p>Демонстрации · продажи · премии</p>
             </div>
           </div>
-          <nav className="nav top-tabs horizontal-nav" aria-label="РћСЃРЅРѕРІРЅС‹Рµ СЂР°Р·РґРµР»С‹">
+          <nav className="nav top-tabs horizontal-nav" aria-label="Основные разделы">
             <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>
-              <span className="ico">рџ“‹</span><span className="nav-text">Р”РµР№СЃС‚РІРёСЏ</span><span className="count">{actionList.length}</span>
+              <span className="ico">📋</span><span className="nav-text">Действия</span><span className="count">{actionList.length}</span>
             </TabButton>
-            {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}><span className="ico">вљ™</span><span className="nav-text">РќР°СЃС‚СЂРѕР№РєРё</span></TabButton>}
-            {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}><span className="ico">в–¦</span><span className="nav-text">РўРѕРІР°СЂС‹</span><span className="count">{products.length}</span></TabButton>}
+            {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}><span className="ico">⚙</span><span className="nav-text">Настройки</span></TabButton>}
+            {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}><span className="ico">▦</span><span className="nav-text">Товары</span><span className="count">{products.length}</span></TabButton>}
           </nav>
           <div className="topbar-title-block">
             <div className="breadcrumb-title">{activePageTitle}</div>
