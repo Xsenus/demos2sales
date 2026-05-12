@@ -45,3 +45,28 @@ FROM (
   GROUP BY id
 ) AS updated
 WHERE app_settings.id = updated.id;
+
+-- v8: переименовать строку сметы «Использование электрокатушки».
+UPDATE demo_expenses
+SET article = 'Ручное перетаскивание кабеля и РВД катушки'
+WHERE row_code = 'd_electro_reel'
+   OR article = 'Использование электрокатушки';
+
+UPDATE app_settings
+SET settings = jsonb_set(settings, '{expense_settings}', updated.rows, true)
+FROM (
+  SELECT id,
+         jsonb_agg(
+           CASE
+             WHEN elem ->> 'code' = 'd_electro_reel' THEN
+               elem || jsonb_build_object('article', 'Ручное перетаскивание кабеля и РВД катушки')
+             ELSE elem
+           END
+           ORDER BY ord
+         ) AS rows
+  FROM app_settings,
+       jsonb_array_elements(settings -> 'expense_settings') WITH ORDINALITY AS t(elem, ord)
+  WHERE jsonb_typeof(settings -> 'expense_settings') = 'array'
+  GROUP BY id
+) AS updated
+WHERE app_settings.id = updated.id;

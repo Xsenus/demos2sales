@@ -363,6 +363,8 @@ def merge_settings(settings: Any) -> Dict[str, Any]:
         row.setdefault("calc_type", "direct")
         if row.get("code") == "d_cryoblaster":
             row["article"] = "Демонстрация криобластера (1 демо = 1 точка Газели)"
+        if row.get("code") == "d_electro_reel":
+            row["article"] = "Ручное перетаскивание кабеля и РВД катушки"
         if row.get("code") == "d_demo_work":
             row["comment"] = "Количество = время на административные процедуры + время работы на демонстрации; ставка NET на руки подставляется по офису менеджера; НПД считается через 0.94"
         if row.get("code") == "o_gazelle_amort":
@@ -805,15 +807,17 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
     office_city = manager_office_city(state, action.get("manager_login", ""))
     rate = office_rate(settings, office_city, "sale_st", 0.50)
 
-    # Excel sheet "4_Итог": [K3] is the final reduction coefficient after SOFT/HARD stop factors.
-    # HARD_STOP makes the deduction coefficient 100%; SOFT_STOP sets the floor to 80%; otherwise the floor is 20%.
+    # [K2] is the efficiency coefficient without stop factors.
+    # New v8 rule: [K3] = 0 for HARD_STOP, min(0.5, [K2]) for SOFT_STOP, otherwise [K2].
+    # [VIC] = [DEMO_COST] * (2 - [K3]) * [СТМ].
     if coeffs.get("HARD_STOP"):
-        k3 = 1.0
+        k3 = 0.0
     elif coeffs.get("SOFT_STOP"):
-        k3 = max(k1, 0.80)
+        k3 = min(0.5, to_float(coeffs.get("K2"), 0.0))
     else:
-        k3 = max(k1, 0.20)
-    deduction_margin_net = demo_cost * k3
+        k3 = to_float(coeffs.get("K2"), 0.0)
+    vic_multiplier = 2.0 - k3
+    deduction_margin_net = demo_cost * vic_multiplier
     vic = deduction_margin_net * rate
     by_section = {
         "driver": sum(to_float(r.get("amount_vat")) for r in expenses if r.get("section") == "driver"),
@@ -864,6 +868,7 @@ def calculate_demo(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, A
         "HARD_STOP": int(coeffs.get("HARD_STOP", 0)),
         "sale_st": round(rate, 6),
         "deduction_margin_net": round(deduction_margin_net, 2),
+        "vic_multiplier": round(vic_multiplier, 6),
         "xP": coeffs["xP"],
         "xR": coeffs["xR"],
         "xM": coeffs["xM"],
@@ -1481,7 +1486,7 @@ class SettingsIn(BaseModel):
     settings: Dict[str, Any]
 
 
-app = FastAPI(title="ИРБИСТЕХ API", version="3.1.0")
+app = FastAPI(title="ИРБИСТЕХ API", version="3.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1494,7 +1499,7 @@ app.add_middleware(
 @app.get("/api/health")
 def api_health():
     state, msg = load_state_from_db()
-    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v7"})
+    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v8"})
 
 
 @app.post("/api/auth/login")

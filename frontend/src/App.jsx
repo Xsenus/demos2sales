@@ -85,6 +85,14 @@ const stopTagForCriterion = (code) => {
   if (String(code) === "P8") return "HARD_STOP";
   return "";
 };
+const levelStopTag = (code, score) => (Number(score || 0) <= 0 ? stopTagForCriterion(code) : "");
+const levelEfficiencyExample = (idx, count, score) => {
+  if (Number(score || 0) <= 0) return "Применяется, когда условие не выполнено или не подтверждено.";
+  const ratio = count <= 1 ? 1 : idx / Math.max(1, count - 1);
+  if (ratio < 0.34) return "Пример: условие выполнено частично, без полного подтверждения.";
+  if (ratio < 0.67) return "Пример: условие подтверждено, но есть ограничения.";
+  return "Пример: условие подтверждено полностью, эффект высокий.";
+};
 
 function useNotice() {
   const [notice, setNotice] = useState({ type: "", text: "" });
@@ -528,7 +536,7 @@ function App() {
   }
 
   return (
-    <div className={`app app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`} style={pageStyle}>
+    <div className="app app-shell top-menu-layout" style={pageStyle}>
       <aside className="sidebar">
         <button className="sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}>{sidebarCollapsed ? "›" : "‹"}</button>
         <div className="brand">
@@ -556,7 +564,21 @@ function App() {
       </aside>
 
       <section className="main">
-        <header className="topbar">
+        <header className="topbar horizontal-topbar">
+          <div className="topbar-brand">
+            <div className="logo" aria-hidden="true">Р</div>
+            <div className="brand-copy">
+              <h1>РР Р‘РРЎРўР•РҐ</h1>
+              <p>Р”РµРјРѕРЅСЃС‚СЂР°С†РёРё В· РїСЂРѕРґР°Р¶Рё В· РїСЂРµРјРёРё</p>
+            </div>
+          </div>
+          <nav className="nav top-tabs horizontal-nav" aria-label="РћСЃРЅРѕРІРЅС‹Рµ СЂР°Р·РґРµР»С‹">
+            <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>
+              <span className="ico">рџ“‹</span><span className="nav-text">Р”РµР№СЃС‚РІРёСЏ</span><span className="count">{actionList.length}</span>
+            </TabButton>
+            {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}><span className="ico">вљ™</span><span className="nav-text">РќР°СЃС‚СЂРѕР№РєРё</span></TabButton>}
+            {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}><span className="ico">в–¦</span><span className="nav-text">РўРѕРІР°СЂС‹</span><span className="count">{products.length}</span></TabButton>}
+          </nav>
           <div className="topbar-title-block">
             <div className="breadcrumb-title">{activePageTitle}</div>
             <div className="breadcrumb-subtitle">{activePageSubtitle}</div>
@@ -855,17 +877,17 @@ function DeductionTab({ calc, confirmed }) {
         <Kpi title={`[xR] ${Number(calc.R || 0).toFixed(0)} / ${Number(calc.R_max || 0).toFixed(0)}`} value={Number(calc.xR || 0).toFixed(3)} />
         <Kpi title={`[xM] ${Number(calc.M || 0).toFixed(0)} / ${Number(calc.M_max || 0).toFixed(0)}`} value={Number(calc.xM || 0).toFixed(3)} />
         <Kpi title="[K2] взвешенная эффективность" value={Number(calc.K2 || 0).toFixed(3)} />
-        <Kpi title="[K1] коэффициент ответственности" value={Number(calc.K1 || 0).toFixed(3)} />
         <Kpi title="SOFT_STOP — мягкий стоп-фактор" value={yesNo(calc.SOFT_STOP)} />
         <Kpi title="HARD_STOP — жесткий стоп-фактор" value={yesNo(calc.HARD_STOP)} />
-        <Kpi title="[K3] коэфф. снижения вычета" value={Number(calc.K3 || 0).toFixed(3)} />
+        <Kpi title="[K3] коэфф. эффективности с учетом стоп-факторов" value={Number(calc.K3 || 0).toFixed(3)} />
+        <Kpi title="Множитель вычета (2 - [K3])" value={Number(calc.vic_multiplier || (2 - Number(calc.K3 || 0))).toFixed(3)} />
         <Kpi title="Ставка премии от маржи [СТМ]" value={`${(Number(calc.sale_st || 0) * 100).toFixed(1)}%`} />
       </div>
       <div className="formula-box">
-        [K2] = 0,45 × [xP] + 0,35 × [xR] + 0,20 × [xM].<br />
+        [K2] = 0,45 × [xP] + 0,35 × [xR] + 0,20 × [xM] — эффективность без стоп-факторов.<br />
         SOFT_STOP = да, если не выбран объект очистки, не подтверждены воздух/площадка или не согласованы критерии успеха. HARD_STOP = да, если карточка подготовки отсутствует или управленческий блок равен нулю.<br />
-        [K3] = 1 при HARD_STOP; max([K1]; 0,80) при SOFT_STOP; max([K1]; 0,20) без стоп-факторов.<br />
-        Уменьшение премии / Вычет [VIC], NET руб. = [DEMO_COST] × [K3] × [СТМ]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM].
+        [K3] = 0 при HARD_STOP; min(0,5; [K2]) при SOFT_STOP; [K2] без стоп-факторов.<br />
+        Уменьшение премии / Вычет [VIC], NET руб. = [DEMO_COST] × (2 - [K3]) × [СТМ]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM].
       </div>
       <div className="card totals-card">
         <Kpi title="Вычет из маржи демонстрации, руб. без НДС" value={money(calc.deduction_margin_net)} />
@@ -929,16 +951,20 @@ function ExpenseSection({ title, rows, allRows, expenseMap, updateExpenseRow, re
 
 function CriterionRow({ criterion, editorValue, onLevel, onComment, readonly }) {
   const levelCount = criterion.levels?.length || 1;
-  const stopTag = stopTagForCriterion(criterion.code);
   return (
     <div className="criterion-row">
-      <div className="criterion-about"><div className="criterion-code">{criterion.code}</div><div className="criterion-title">{criterion.title}{stopTag ? <span className={`stop-tag ${stopTag === "HARD_STOP" ? "hard" : "soft"}`}>[{stopTag}]</span> : null}</div><div className="criterion-desc">{criterion.desc}</div></div>
+      <div className="criterion-about"><div className="criterion-code">{criterion.code}</div><div className="criterion-title">{criterion.title}</div><div className="criterion-desc">{criterion.desc}</div></div>
       <div className="criterion-levels">
-        {criterion.levels.map((level, idx) => (
-          <button key={`${criterion.code}-${idx}`} disabled={readonly} className={`level-box level-tone-${Math.round((idx / Math.max(1, levelCount - 1)) * 4)} ${Number(editorValue.level_index) === idx ? "active" : ""}`} onClick={() => onLevel(idx)}>
-            <span>{level[0]}</span><b>[{level[1]}]</b>
-          </button>
-        ))}
+        {criterion.levels.map((level, idx) => {
+          const tag = levelStopTag(criterion.code, level[1]);
+          return (
+            <button key={`${criterion.code}-${idx}`} disabled={readonly} className={`level-box level-tone-${Math.round((idx / Math.max(1, levelCount - 1)) * 4)} ${Number(editorValue.level_index) === idx ? "active" : ""}`} onClick={() => onLevel(idx)}>
+              <span className="level-title-strong">{level[0]}{tag ? <span className={`stop-tag ${tag === "HARD_STOP" ? "hard" : "soft"}`}>[{tag}]</span> : null}</span>
+              <em className="level-example-text">{levelEfficiencyExample(idx, levelCount, level[1])}</em>
+              <b>[{level[1]}]</b>
+            </button>
+          );
+        })}
       </div>
       <div className="criterion-comment"><textarea disabled={readonly} value={editorValue.manager_comment || ""} onChange={(e) => onComment(e.target.value)} placeholder="Комментарий менеджера" /></div>
     </div>
@@ -1101,8 +1127,11 @@ function SettingsView({ user, settings, setSettings, saveSettings }) {
         <div className="sub-tabs"><TabButton active={criteriaTab === "P"} onClick={() => setCriteriaTab("P")}>P — Подготовка</TabButton><TabButton active={criteriaTab === "R"} onClick={() => setCriteriaTab("R")}>R — Результат</TabButton><TabButton active={criteriaTab === "M"} onClick={() => setCriteriaTab("M")}>M — Управленческий</TabButton></div>
         <div className="table-shell"><table className="dense-table"><thead><tr><th>Код</th><th>Критерий</th><th>Уровни и баллы</th></tr></thead><tbody>
           {settings.criteria.filter((criterion) => criterion.block === criteriaTab).map((criterion) => (
-            <tr key={criterion.code}><td>{criterion.code}</td><td><div className="row-title">{criterion.title}{stopTagForCriterion(criterion.code) ? <span className={`stop-tag ${stopTagForCriterion(criterion.code) === "HARD_STOP" ? "hard" : "soft"}`}>[{stopTagForCriterion(criterion.code)}]</span> : null}</div><div className="muted tiny">{criterion.desc}</div></td><td><div className="levels-editor">
-              {criterion.levels.map((level, lIndex) => <div key={`${criterion.code}-${lIndex}`} className="level-edit-box"><div className="muted tiny">{level[0]}</div><input type="number" disabled={!isDirector} value={level[1]} onChange={(e) => updateCriterionScore(criterion.code, lIndex, Number(e.target.value || 0))} /></div>)}
+            <tr key={criterion.code}><td>{criterion.code}</td><td><div className="row-title">{criterion.title}</div><div className="muted tiny">{criterion.desc}</div></td><td><div className="levels-editor">
+              {criterion.levels.map((level, lIndex) => {
+                const tag = levelStopTag(criterion.code, level[1]);
+                return <div key={`${criterion.code}-${lIndex}`} className="level-edit-box"><div><div className="level-title-strong">{level[0]}{tag ? <span className={`stop-tag ${tag === "HARD_STOP" ? "hard" : "soft"}`}>[{tag}]</span> : null}</div><div className="level-example-text">{levelEfficiencyExample(lIndex, criterion.levels.length, level[1])}</div></div><input type="number" disabled={!isDirector} value={level[1]} onChange={(e) => updateCriterionScore(criterion.code, lIndex, Number(e.target.value || 0))} /></div>;
+              })}
             </div></td></tr>
           ))}
         </tbody></table></div>
