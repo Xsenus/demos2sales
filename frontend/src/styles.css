@@ -527,6 +527,13 @@ input:disabled,textarea:disabled,select:disabled,input[readonly]{background:var(
 .horizontal-topbar .topbar-actions{justify-content:flex-end;min-width:280px}
 .top-menu-layout .content{padding-top:18px}
 
+/* v9: negative deduction/premium figures are shown as red values with a minus sign in UI. */
+.negative-kpi b,
+.negative-text{
+  color:#dc2626!important;
+}
+.demo-time-card .card-head{margin:-16px -16px 14px -16px}
+
 .dense-table{
   table-layout:fixed;
   white-space:normal!important;

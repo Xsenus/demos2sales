@@ -41,9 +41,9 @@ SHORT_TYPE = {ACTION_DEMO: "Демонстрация", ACTION_SALE: "Прода�
 DEFAULT_OFFICE_CITIES = ["Казань", "Москва"]
 
 DEFAULT_USERS = {
-    "artur": {"login": "artur", "password": "123", "role": "director", "name": "Артур Гимадеев", "office_city": "Казань"},
-    "ruslan": {"login": "ruslan", "password": "111", "role": "manager", "name": "Абдулин Руслан", "office_city": "Казань"},
-    "natalia": {"login": "natalia", "password": "222", "role": "manager", "name": "Денисова Наталья", "office_city": "Казань"},
+    "admin": {"login": "admin", "password": "123", "role": "director", "name": "Администратор", "office_city": "Казань"},
+    "ruslan": {"login": "ruslan", "password": "222", "role": "manager", "name": "Абдулин Руслан", "office_city": "Казань"},
+    "natalia": {"login": "natalia", "password": "111", "role": "manager", "name": "Денисова Наталья", "office_city": "Казань"},
 }
 
 MONTHS_RU = {
@@ -457,9 +457,11 @@ def office_rate(settings: Dict[str, Any], city: str, key: str, default: float = 
 def default_office_params(price_net: float, settings: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
     params = {}
     for city in office_names(settings):
+        prem_max = round(price_net * 0.10, 2)
         params[city] = {
+            "prem_max": prem_max,
+            "pr": prem_max,
             "mr": round(price_net * 0.20, 2),
-            "pr": round(price_net * 0.10, 2),
             "st": round(office_rate(settings, city, "sale_st", 0.50), 6),
         }
     return params
@@ -470,7 +472,7 @@ def normalize_product(product: Dict[str, Any], settings: Optional[Dict[str, Any]
     vat = to_float(settings.get("vat_rate"), 0.22)
     product_id = str(product.get("product_id") or product.get("ID товара") or product.get("sku") or product.get("Артикул") or new_id("PRD"))
     sku = str(product.get("sku") or product.get("Артикул") or product_id)
-    name = str(product.get("name") or product.get("Наименование") or product.get("Наименование ТМЦ") or product.get("Наименование оборудования") or "")
+    name = str(product.get("model") or product.get("name") or product.get("Модель [model]") or product.get("Наименование") or product.get("Наименование ТМЦ") or product.get("Наименование оборудования") or "")
     price_vat = to_float(product.get("price_vat", product.get("Цена с НДС (прайс) [PR0]", product.get("Цена руб. с НДС"))), 0)
     price_net = to_float(product.get("price_net", product.get("Цена без НДС (прайс)", product.get("Цена руб. без НДС"))), 0)
     if price_net <= 0 and price_vat > 0:
@@ -487,15 +489,18 @@ def normalize_product(product: Dict[str, Any], settings: Optional[Dict[str, Any]
     norm_params: Dict[str, Dict[str, float]] = {}
     for city in office_names(settings):
         raw = city_params.get(city, {}) if isinstance(city_params, dict) else {}
-        # Excel import supports both «Казань_MR» and exact Russian names.
+        prem_max = to_float(
+            raw.get("prem_max", raw.get("pr", product.get(f"{city}_prem_max", product.get(f"{city}_PR", product.get(f"{city} PR"))))),
+            defaults[city]["prem_max"],
+        )
         mr = to_float(raw.get("mr", product.get(f"{city}_MR", product.get(f"{city} MR"))), defaults[city]["mr"])
-        pr = to_float(raw.get("pr", product.get(f"{city}_PR", product.get(f"{city} PR"))), defaults[city]["pr"])
         st = pct_to_decimal(raw.get("st", product.get(f"{city}_ST", product.get(f"{city} ST"))), defaults[city]["st"])
-        norm_params[city] = {"mr": round(mr, 2), "pr": round(pr, 2), "st": round(st, 6)}
+        norm_params[city] = {"prem_max": round(prem_max, 2), "pr": round(prem_max, 2), "mr": round(mr, 2), "st": round(st, 6)}
     return {
         "product_id": product_id,
         "sku": sku,
         "name": name,
+        "model": name,
         "price_vat": round(price_vat, 2),
         "price_net": round(price_net, 2),
         "row_order": int(to_float(product.get("row_order"), row_order or 0)),
@@ -541,9 +546,11 @@ def product_params_for_city(product: Dict[str, Any], city: str, settings: Dict[s
     if city not in params:
         city = office_names(settings)[0]
     raw = params.get(city, {})
+    prem_max = to_float(raw.get("prem_max", raw.get("pr")), p["price_net"] * 0.10)
     return {
+        "prem_max": prem_max,
+        "pr": prem_max,
         "mr": to_float(raw.get("mr"), p["price_net"] * 0.20),
-        "pr": to_float(raw.get("pr"), p["price_net"] * 0.10),
         "st": pct_to_decimal(raw.get("st"), office_rate(settings, city, "sale_st", 0.50)),
     }
 
@@ -552,37 +559,30 @@ def create_sale_row_from_product(product: Dict[str, Any], qty: float, settings: 
     p = normalize_product(product, settings)
     params = product_params_for_city(p, office_city, settings)
     qty = max(0.0, to_float(qty, 1.0))
-    pr0 = to_float(p.get("price_vat"), 0)
-    sale_price_vat = to_float(sale_price_vat, pr0)
-    mr = max(0.0, to_float(params.get("mr"), 0))
-    st = pct_to_decimal(params.get("st"), 0)
-    pr_limit = to_float(params.get("pr"), 0)
-    price_net = sale_price_vat / (1 + to_float(settings.get("vat_rate"), 0.22)) if sale_price_vat else 0
-    discount = max(0.0, pr0 - sale_price_vat)
-    # По формуле из задания: CASH = (1 - ([PR0]-[PR])/[MR]) × [ST] × [MR].
-    # Здесь [PR] в строке продажи трактуется как фактическая цена продажи с НДС.
-    if mr > 0:
-        cash_unit = (1 - discount / mr) * st * mr
-    else:
-        cash_unit = 0
-    cash_unit = max(0.0, cash_unit)
-    total_vat = sale_price_vat * qty
+    price_vat = to_float(p.get("price_vat"), 0)
+    price_net = to_float(p.get("price_net"), 0)
+    if price_net <= 0 and price_vat > 0:
+        price_net = price_vat / (1 + to_float(settings.get("vat_rate"), 0.22))
+    prem_max = max(0.0, to_float(params.get("prem_max", params.get("pr")), 0))
+    total_vat = price_vat * qty
     total_net = price_net * qty
-    cash_net = cash_unit * qty
+    cash_net = prem_max * qty
     return {
         "product_id": p["product_id"],
         "sku": p["sku"],
         "name": p["name"],
-        "pr0_vat": round(pr0, 2),
-        "price_vat": round(sale_price_vat, 2),
+        "model": p.get("model") or p["name"],
+        "pr0_vat": round(price_vat, 2),
+        "price_vat": round(price_vat, 2),
         "price_net": round(price_net, 2),
         "qty": qty,
         "total_vat": round(total_vat, 2),
         "total_net": round(total_net, 2),
         "vat_sum": round(total_vat - total_net, 2),
-        "mr_unit": round(mr, 2),
-        "pr_unit": round(pr_limit, 2),
-        "st_pct": round(st, 6),
+        "mr_unit": round(to_float(params.get("mr"), 0), 2),
+        "pr_unit": round(prem_max, 2),
+        "prem_max": round(prem_max, 2),
+        "st_pct": round(pct_to_decimal(params.get("st"), office_rate(settings, office_city, "sale_st", 0.5)), 6),
         "cash_net": round(cash_net, 2),
     }
 
@@ -598,8 +598,7 @@ def sale_rows_to_records(action: Dict[str, Any], state: Dict[str, Any]) -> List[
         if not found:
             continue
         qty = to_float(r.get("qty"), 1)
-        sale_price_vat = to_float(r.get("price_vat"), found["price_vat"])
-        out.append(create_sale_row_from_product(found, qty, settings, office_city, sale_price_vat))
+        out.append(create_sale_row_from_product(found, qty, settings, office_city))
     return out
 
 
@@ -937,14 +936,13 @@ def calculate_premium(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str
     demo_rows = []
     for s in sales:
         calc = calculate_sale(s, state)
-        amount = to_float(s.get("confirmed_amount"), calc["cash_all"]) if s.get("is_director_confirmed") else 0.0
+        amount = calc["cash_all"]
         sales_sum += amount
         sale_rows.append({
             "action_id": s["id"],
             "Дата": s.get("date"),
             "Клиент": s.get("client"),
-            "Премия расчетная [CASH_ALL], руб.": round(calc["cash_all"], 2),
-            "Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб.": round(amount, 2),
+            "Премия по продаже: сумма prem_max × кол-во, руб.": round(calc["cash_all"], 2),
         })
     for d in demos:
         calc = calculate_demo(d, state)
@@ -968,6 +966,7 @@ def calculate_premium(action: Dict[str, Any], state: Dict[str, Any]) -> Dict[str
         "vic_confirm": round(demo_sum, 2),
         "payout": round(profit, 2),
         "profit": round(profit, 2),
+        "approved_premium": round(to_float(action.get("confirmed_amount"), 0), 2) if action.get("confirmed_amount") is not None else None,
         "sale_rows": sale_rows,
         "demo_rows": demo_rows,
         "period_from_seq": min([int(a.get("sequence_no", 0)) for a in period], default=0),
@@ -1486,7 +1485,7 @@ class SettingsIn(BaseModel):
     settings: Dict[str, Any]
 
 
-app = FastAPI(title="ИРБИСТЕХ API", version="3.2.0")
+app = FastAPI(title="ИРБИСТЕХ API", version="3.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1499,7 +1498,7 @@ app.add_middleware(
 @app.get("/api/health")
 def api_health():
     state, msg = load_state_from_db()
-    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v8"})
+    return clean_json({"ok": True, "db_message": msg, "actions": len(state.get("actions", [])), "version": "v9"})
 
 
 @app.post("/api/auth/login")
@@ -1748,15 +1747,12 @@ def products_to_excel(products: List[Dict[str, Any]], settings: Dict[str, Any]) 
     for p in sorted_products(products, settings):
         row = {
             "Артикул": p["sku"],
-            "Наименование": p["name"],
-            "Цена с НДС (прайс) [PR0], руб./шт": p["price_vat"],
-            "Цена без НДС (прайс), руб./шт": p["price_net"],
+            "Модель [model]": p.get("model") or p["name"],
+            "Цена с НДС 22%, руб./шт [price_vat]": p["price_vat"],
         }
         for city in office_names(settings):
             params = p.get("office_params", {}).get(city, {})
-            row[f"{city}_MR"] = to_float(params.get("mr"), p["price_net"] * 0.20)
-            row[f"{city}_PR"] = to_float(params.get("pr"), p["price_net"] * 0.10)
-            row[f"{city}_ST"] = decimal_to_pct(params.get("st", office_rate(settings, city, "sale_st", 0.5)))
+            row[f"{city}: Премия NET за продажу 1 шт, руб. [prem_max]"] = to_float(params.get("prem_max", params.get("pr")), p["price_net"] * 0.10)
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -1782,21 +1778,28 @@ def read_products_excel(raw: bytes, filename: str, settings: Dict[str, Any]) -> 
     for i, r in enumerate(df.to_dict("records"), start=1):
         sku = str(r.get("Артикул") or r.get("sku") or "").strip()
         name = str(r.get("Наименование") or r.get("name") or "").strip()
-        if not sku and not name:
+        model = str(r.get("Модель [model]") or r.get("Модель") or name).strip()
+        if not sku and not model:
             continue
+        price_vat = r.get("Цена с НДС 22%, руб./шт [price_vat]", r.get("Цена с НДС (прайс) [PR0], руб./шт", r.get("price_vat", 0)))
         item = {
             "product_id": sku or new_id("PRD"),
-            "sku": sku or name,
-            "name": name,
-            "price_vat": r.get("Цена с НДС (прайс) [PR0], руб./шт", r.get("price_vat", 0)),
+            "sku": sku or model,
+            "name": model,
+            "model": model,
+            "price_vat": price_vat,
             "price_net": r.get("Цена без НДС (прайс), руб./шт", r.get("price_net", 0)),
             "row_order": i,
             "office_params": {},
         }
         for city in office_names(settings):
+            prem_col = f"{city}: Премия NET за продажу 1 шт, руб. [prem_max]"
+            legacy_pr = r.get(f"{city}_PR", r.get(f"{city} PR", None))
+            prem_max = to_float(r.get(prem_col, r.get(f"{city}_prem_max", legacy_pr)), 0)
             item["office_params"][city] = {
+                "prem_max": prem_max,
+                "pr": prem_max,
                 "mr": to_float(r.get(f"{city}_MR"), 0),
-                "pr": to_float(r.get(f"{city}_PR"), 0),
                 "st": pct_to_decimal(r.get(f"{city}_ST"), office_rate(settings, city, "sale_st", 0.5)),
             }
         products.append(normalize_product(item, settings, i))

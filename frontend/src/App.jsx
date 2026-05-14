@@ -8,6 +8,7 @@ const ACTION_PREMIUM = "Выплата премии";
 const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 const money = (v) => `${Number(v || 0).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₽`;
 const money0 = (v) => `${Number(v || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+const negMoney = (v) => `-${money(Math.abs(Number(v || 0)))}`;
 const formatDateRu = (v) => {
   const raw = String(v || "").slice(0, 10);
   const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -64,12 +65,9 @@ const productColumnsStorageKey = (login) => `demos2sales.products.columnWidths.$
 const defaultProductColumnWidths = {
   order: 74,
   sku: 170,
-  name: 360,
-  price_vat: 160,
-  price_net: 160,
-  mr: 150,
-  pr: 170,
-  st: 155,
+  model: 420,
+  price_vat: 190,
+  prem_max: 220,
 };
 const readProductColumnWidths = (login) => {
   if (typeof window === "undefined") return { ...defaultProductColumnWidths };
@@ -537,32 +535,6 @@ function App() {
 
   return (
     <div className="app app-shell top-menu-layout" style={pageStyle}>
-      <aside className="sidebar">
-        <button className="sidebar-toggle" type="button" onClick={toggleSidebar} title={sidebarCollapsed ? "Развернуть меню" : "Свернуть меню"}>{sidebarCollapsed ? "›" : "‹"}</button>
-        <div className="brand">
-          <div className="logo" aria-hidden="true">И</div>
-          <div className="brand-copy">
-            <h1>ИРБИСТЕХ</h1>
-            <p>Демонстрации · продажи · премии</p>
-          </div>
-        </div>
-
-        <nav className="nav top-tabs" aria-label="Основные разделы">
-          <TabButton active={mainTab === "actions"} onClick={() => setMainTab("actions")}>
-            <span className="ico">📋</span><span className="nav-text">Действия</span><span className="count">{actionList.length}</span>
-          </TabButton>
-          {user.role === "director" && <TabButton active={mainTab === "settings"} onClick={() => setMainTab("settings")}><span className="ico">⚙</span><span className="nav-text">Настройки</span></TabButton>}
-          {user.role === "director" && <TabButton active={mainTab === "products"} onClick={() => setMainTab("products")}><span className="ico">▦</span><span className="nav-text">Товары</span><span className="count">{products.length}</span></TabButton>}
-        </nav>
-
-        <div className="sidebar-card">
-          <div className="sidebar-card-title">Текущий пользователь</div>
-          <div className="sidebar-user-name">{user.name}</div>
-          <div className="sidebar-user-role">{userRoleLabel}</div>
-          <button className="ghost sidebar-logout" onClick={logout}>Выйти</button>
-        </div>
-      </aside>
-
       <section className="main">
         <header className="topbar horizontal-topbar">
           <div className="topbar-brand">
@@ -659,7 +631,7 @@ function App() {
                         <span>Подтверждено директором</span>
                       </label>
                       <label className="field-stack compact-field">
-                        <span>{detailKind === "demo" ? "Подтвержденное уменьшение премии [VIC_CONFIRM]" : detailKind === "sale" ? "Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" : "Премия к выплате [PROFIT]"}</span>
+                        <span>{detailKind === "demo" ? "Подтвержденное уменьшение премии [VIC_CONFIRM]" : detailKind === "sale" ? "Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" : "Утвержденное директором значение премии"}</span>
                         <input type="number" value={editor.confirmed_amount ?? ""} onChange={(e) => updateDirectorFields("confirmed_amount", e.target.value)} placeholder="Сумма" disabled={user.role !== "director" || editor.is_locked} />
                       </label>
                       <label className="field-stack compact-field wide-field">
@@ -760,35 +732,24 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
         </Field>
       </div>
 
-      <div className="card demo-hours-row">
-        <Field label="Время работы на демонстрации, ч">
-          <input type="text" inputMode="decimal" value={oneDecimalComma(demoHours)} disabled={readonly} onChange={(e) => updateDemoMeta("demo_hours", e.target.value)} />
-          <div className="field-help">
-            <b>Включает только:</b> время монтажа, демонстрации и обратной сборки на территории клиента; работа с электрическим компрессором, электрокатушкой и криобластером.
-            <br /><b>НЕ включает:</b> любое вождение, так как маяк фиксирует все перемещения автомобиля; остановка для питания во время вождения; остановка для отдыха во время вождения.
-          </div>
-        </Field>
-        <Field label="Время на административные процедуры, ч">
-          <input type="text" inputMode="decimal" value={oneDecimalComma(driverPrepHours)} disabled={readonly} onChange={(e) => updateDemoMeta("driver_prep_hours", e.target.value)} />
-          <div className="field-help">
-            <b>Включает только:</b> подготовительно-заключительное время до выезда и после возвращения; время приемки и сдачи автомобиля, оборудования и документов; время ожидания в местах погрузки, разгрузки, допуска на объект; время оформления документов по выезду и демонстрации; работа на заправке, авторемонте, автомойке; время иных обязательных процедур перед выездом и после рейса.
-          </div>
-        </Field>
-        <div className="muted compact span-2">Оба поля используются в «Расчетах с водителем» и в Части 1 сметы демонстрации.</div>
-      </div>
-
       <div className="sub-tabs">
         <TabButton active={demoTab === "estimate"} onClick={() => setDemoTab("estimate")}>Смета демонстрации</TabButton>
         <TabButton active={demoTab === "P"} onClick={() => setDemoTab("P")}>P — Подготовка</TabButton>
         <TabButton active={demoTab === "R"} onClick={() => setDemoTab("R")}>R — Результат</TabButton>
         <TabButton active={demoTab === "M"} onClick={() => setDemoTab("M")}>M — Управленческий фактор</TabButton>
         <TabButton active={demoTab === "driver"} onClick={() => setDemoTab("driver")}>Расчеты с водителем</TabButton>
-        <TabButton active={demoTab === "deduction"} onClick={() => setDemoTab("deduction")}>Расчет вычета</TabButton>
+        <TabButton active={demoTab === "deduction"} onClick={() => setDemoTab("deduction")}>Вычет премии</TabButton>
       </div>
 
       {demoTab === "driver" && <DriverSettlement calc={calc} />}
       {demoTab === "estimate" && (
         <div className="stack-gap">
+          <DemoTimeBlock
+            demoHours={demoHours}
+            driverPrepHours={driverPrepHours}
+            readonly={readonly}
+            updateDemoMeta={updateDemoMeta}
+          />
           <ExpenseSection
             title="Часть 1. Статья расходов по совместителю водителю-демонстратору (ГПХ, ПНД)"
             rows={expenseRows.filter((row) => row.section === "driver")}
@@ -831,6 +792,30 @@ function DemoView({ detail, editor, demoTab, setDemoTab, updateEditorField, upda
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function DemoTimeBlock({ demoHours, driverPrepHours, readonly, updateDemoMeta }) {
+  return (
+    <div className="card demo-time-card">
+      <div className="card-head compact-row"><h3>Время демонстрации</h3></div>
+      <div className="demo-hours-row">
+        <Field label="Время работы на демонстрации, ч">
+          <input type="text" inputMode="decimal" value={oneDecimalComma(demoHours)} disabled={readonly} onChange={(e) => updateDemoMeta("demo_hours", e.target.value)} />
+          <div className="field-help">
+            <b>Включает только:</b> время монтажа, демонстрации и обратной сборки на территории клиента; работа с электрическим компрессором, электрокатушкой и криобластером.
+            <br /><b>НЕ включает:</b> любое вождение, так как маяк фиксирует все перемещения автомобиля; остановка для питания во время вождения; остановка для отдыха во время вождения.
+          </div>
+        </Field>
+        <Field label="Время на административные процедуры, ч">
+          <input type="text" inputMode="decimal" value={oneDecimalComma(driverPrepHours)} disabled={readonly} onChange={(e) => updateDemoMeta("driver_prep_hours", e.target.value)} />
+          <div className="field-help">
+            <b>Включает только:</b> подготовительно-заключительное время до выезда и после возвращения; время приемки и сдачи автомобиля, оборудования и документов; время ожидания в местах погрузки, разгрузки, допуска на объект; время оформления документов по выезду и демонстрации; работа на заправке, авторемонте, автомойке; время иных обязательных процедур перед выездом и после рейса.
+          </div>
+        </Field>
+        <div className="muted compact span-2">Оба поля используются в «Расчетах с водителем» и в Части 1 сметы демонстрации.</div>
+      </div>
     </div>
   );
 }
@@ -890,9 +875,8 @@ function DeductionTab({ calc, confirmed }) {
         Уменьшение премии / Вычет [VIC], NET руб. = [DEMO_COST] × (2 - [K3]) × [СТМ]. Подтвержденная директором сумма хранится как подтвержденное уменьшение премии [VIC_CONFIRM].
       </div>
       <div className="card totals-card">
-        <Kpi title="Вычет из маржи демонстрации, руб. без НДС" value={money(calc.deduction_margin_net)} />
-        <Kpi title="Уменьшение премии / Вычет [VIC], NET руб." value={money(calc.VIC)} />
-        <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={money(confirmed)} />
+        <Kpi className="negative-kpi" title="Уменьшение премии / Вычет [VIC], NET руб." value={negMoney(calc.VIC)} />
+        <Kpi className="negative-kpi" title="Подтвержденное уменьшение премии [VIC_CONFIRM]" value={negMoney(confirmed)} />
       </div>
     </div>
   );
@@ -983,7 +967,7 @@ function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSea
       </div>
       <div className="kpi-grid sale-kpi">
         <Kpi title="Сумма продажи с НДС" value={money(calc.total_vat)} />
-        <Kpi title="Суммарная премия за продажу [CASH_ALL]" value={money(calc.cash_all)} />
+        <Kpi title="Премия по продаже: сумма prem_max × кол-во" value={money(calc.cash_all)} />
         <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM]" value={money(editor.confirmed_amount)} />
       </div>
       <div className="card sale-products-card">
@@ -998,15 +982,15 @@ function SaleView({ detail, editor, updateEditorField, updateSaleRow, productSea
         </div>
         <div className="table-shell">
           <table className="dense-table">
-            <thead><tr><th>Артикул</th><th>Наименование</th><th>Цена с НДС (прайс) [PR0]</th><th>Цена продажи [PR]</th><th>Кол-во</th><th>Премия NET за продажу [CASH]</th><th></th></tr></thead>
+            <thead><tr><th>Артикул</th><th>Модель [model]</th><th>Цена с НДС 22%, руб./шт [price_vat]</th><th>Кол-во</th><th>Премия NET за продажу 1 шт, руб. [prem_max]</th><th>Премия по строке</th><th></th></tr></thead>
             <tbody>
               {(editor.rows || []).map((row, index) => (
                 <tr key={`${row.product_id}-${index}`}>
                   <td>{row.sku}</td>
-                  <td>{row.name}</td>
-                  <td className="readonly-cell align-right">{money(row.pr0_vat || row.price_vat)}</td>
-                  <td><input type="number" disabled={readonly} value={row.price_vat ?? 0} onChange={(e) => updateSaleRow(index, "price_vat", e.target.value)} /></td>
+                  <td>{row.model || row.name}</td>
+                  <td className="readonly-cell align-right">{money(row.price_vat || row.pr0_vat)}</td>
                   <td><input type="number" disabled={readonly} value={row.qty ?? 1} onChange={(e) => updateSaleRow(index, "qty", e.target.value)} /></td>
+                  <td className="readonly-cell strong align-right">{money(row.prem_max ?? row.pr_unit)}</td>
                   <td className="readonly-cell strong align-right">{money(row.cash_net)}</td>
                   <td><div className="mini-actions sale-row-actions"><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("up", index)}>↑</button><button className="ghost xs" disabled={readonly} onClick={() => saleRowCommand("down", index)}>↓</button><button className="danger xs" disabled={readonly} onClick={() => saleRowCommand("delete", index)}>✕</button></div></td>
                 </tr>
@@ -1030,9 +1014,10 @@ function PremiumView({ detail, editor, updateEditorField, user }) {
         <Field label="Комментарий" className="span-2"><textarea value={editor.comment || ""} disabled={readonly} onChange={(e) => updateEditorField("comment", e.target.value)} /></Field>
       </div>
       <div className="kpi-grid premium-kpi">
-        <Kpi title="Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб." value={money(calc.cash_all_confirm)} />
-        <Kpi title="Подтвержденное уменьшение премии [VIC_CONFIRM], руб." value={money(calc.vic_confirm)} />
-        <Kpi title="Премия к выплате [PROFIT], руб." value={money(calc.profit)} />
+        <Kpi title="Расчетная премия по продажам: сумма prem_max × кол-во, руб." value={money(calc.cash_all_confirm)} />
+        <Kpi className="negative-kpi" title="Подтвержденное уменьшение премии [VIC_CONFIRM], руб." value={negMoney(calc.vic_confirm)} />
+        <Kpi title="Расчетная премия к выплате [PROFIT], руб." value={money(calc.profit)} />
+        <Kpi title="Утвержденное директором значение премии" value={calc.approved_premium == null ? "—" : money(calc.approved_premium)} />
       </div>
       {calc.warning ? <div className="warning-box">{calc.warning}</div> : null}
       <div className="card"><h3>Продажи периода</h3><PremiumSalesTable rows={calc.sale_rows || []} /></div>
@@ -1044,8 +1029,8 @@ function PremiumView({ detail, editor, updateEditorField, user }) {
 function PremiumSalesTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
-    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Премия расчетная [CASH_ALL], руб.</th><th>Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Премия расчетная [CASH_ALL], руб."])}</td><td className="align-right strong">{money(r["Подтвержденная премия от продаж [CASH_ALL_CONFIRM], руб."])}</td></tr>)}
+    <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Премия по продаже: сумма prem_max × кол-во, руб.</th></tr></thead><tbody>
+      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right strong">{money(r["Премия по продаже: сумма prem_max × кол-во, руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
@@ -1054,7 +1039,7 @@ function PremiumDemoTable({ rows }) {
   if (!rows.length) return <div className="muted compact">Нет данных.</div>;
   return (
     <div className="table-shell"><table className="dense-table"><thead><tr><th>Дата</th><th>Клиент</th><th>Уменьшение премии / Вычет [VIC], NET руб.</th><th>Подтвержденное уменьшение премии [VIC_CONFIRM], руб.</th></tr></thead><tbody>
-      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right">{money(r["Уменьшение премии / Вычет [VIC], NET руб."])}</td><td className="align-right strong">{money(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
+      {rows.map((r) => <tr key={r.action_id}><td>{formatDateRu(r["Дата"])}</td><td>{r["Клиент"]}</td><td className="align-right negative-text">{negMoney(r["Уменьшение премии / Вычет [VIC], NET руб."])}</td><td className="align-right strong negative-text">{negMoney(r["Подтвержденное уменьшение премии [VIC_CONFIRM], руб."])}</td></tr>)}
     </tbody></table></div>
   );
 }
@@ -1186,12 +1171,9 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
   const columns = [
     ["order", ""],
     ["sku", "Артикул"],
-    ["name", "Наименование"],
-    ["price_vat", "Цена с НДС (прайс) [PR0]"],
-    ["price_net", "Цена без НДС (прайс)"],
-    ["mr", "Маржа без НДС [MR]"],
-    ["pr", "Макс. премия NET [PR]"],
-    ["st", "Ставка премии от маржи [ST]"],
+    ["model", "Модель [model]"],
+    ["price_vat", "Цена с НДС 22%, руб./шт [price_vat]"],
+    ["prem_max", "Премия NET за продажу 1 шт, руб. [prem_max]"],
   ];
   const saveWidths = (next) => {
     setColumnWidths(next);
@@ -1235,7 +1217,7 @@ function ProductsView({ user, settings, products, setProducts, saveProducts, imp
         <div className="table-shell products-table-shell"><table className="dense-table products-table"><thead><tr>{columns.map(([key, label]) => <ResizableTh key={key} style={colStyle(key)} onResize={(event) => startColumnResize(key, event)}>{label}</ResizableTh>)}</tr></thead><tbody>
           {products.map((row, index) => {
             const params = row.office_params?.[selectedCity] || row.city_params?.[selectedCity] || {};
-            return <tr key={`${row.product_id}-${index}`}><td style={colStyle("order")}><div className="mini-actions product-row-actions"><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "up")}>↑</button><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "down")}>↓</button></div></td><td style={colStyle("sku")}>{row.sku}</td><td style={colStyle("name")}>{row.name}</td><td style={colStyle("price_vat")} className="align-right">{money(row.price_vat)}</td><td style={colStyle("price_net")} className="align-right">{money(row.price_net)}</td><td style={colStyle("mr")} className="align-right">{money(params.mr)}</td><td style={colStyle("pr")} className="align-right">{money(params.pr)}</td><td style={colStyle("st")} className="align-right">{percent(params.st)}</td></tr>;
+            return <tr key={`${row.product_id}-${index}`}><td style={colStyle("order")}><div className="mini-actions product-row-actions"><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "up")}>↑</button><button className="ghost xs" disabled={!isDirector} onClick={() => moveProduct(index, "down")}>↓</button></div></td><td style={colStyle("sku")}>{row.sku}</td><td style={colStyle("model")}>{row.model || row.name}</td><td style={colStyle("price_vat")} className="align-right">{money(row.price_vat)}</td><td style={colStyle("prem_max")} className="align-right">{money(params.prem_max ?? params.pr)}</td></tr>;
           })}
         </tbody></table></div>
       </div>
@@ -1261,7 +1243,7 @@ function Field({ label, children, className = "" }) {
 }
 function TabButton({ active, children, ...props }) { return <button className={`tab-btn ${active ? "active" : ""}`} {...props}>{children}</button>; }
 function Notice({ notice }) { return <div className={`notice ${notice.type || "info"}`}>{notice.text}</div>; }
-function Kpi({ title, value }) { return <div className="kpi-box"><span>{title}</span><b>{value}</b></div>; }
+function Kpi({ title, value, className = "" }) { return <div className={`kpi-box ${className}`}><span>{title}</span><b>{value}</b></div>; }
 function cardClass(item) {
   if (item.is_locked) return "locked";
   if (item.type === ACTION_DEMO) return item.is_director_confirmed ? "demo-confirmed" : "demo-open";
